@@ -5,27 +5,46 @@ import connectDB from './config/db.js';
 
 dotenv.config();
 
-const seedAdmin = async () => {
-  await connectDB();
-
-  const adminEmail = 'gumansingh.web@gmail.com';
-  const adminPassword = '12345678';
-
-  const userExists = await User.findOne({ email: adminEmail });
-
-  if (!userExists) {
-    await User.create({
-      name: 'Guman Singh',
-      email: adminEmail,
-      password: adminPassword,
-      role: 'admin'
-    });
-    console.log('Admin user seeded successfully');
-  } else {
-    console.log('Admin user already exists');
+const admins = [
+  {
+    name: 'Guman Singh',
+    email: 'gumansingh.oditechglobal@gmail.com',
+    password: '123456',
+    role: 'admin'
+  },
+  {
+    name: 'Guman Singh',
+    email: 'gumansingh.web@gmail.com',
+    password: '12345678',
+    role: 'admin'
   }
+];
 
-  process.exit();
+const seedAdmin = async () => {
+  try {
+    await connectDB();
+
+    for (const adminData of admins) {
+      const userExists = await User.findOne({ email: adminData.email });
+
+      if (!userExists) {
+        await User.create(adminData);
+        console.log(`Admin user ${adminData.email} seeded successfully`);
+      } else {
+        if (userExists.role !== 'admin') {
+          userExists.role = 'admin';
+          await userExists.save();
+          console.log(`Updated user ${adminData.email} role to admin`);
+        } else {
+          console.log(`Admin user ${adminData.email} already exists`);
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error seeding admin users:', error.message);
+  } finally {
+    process.exit();
+  }
 };
 
 seedAdmin();

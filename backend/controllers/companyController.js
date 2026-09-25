@@ -86,23 +86,60 @@ export const getCompanyById = asyncHandler(async (req, res) => {
  * @access Private / Admin
  */
 export const createCompany = asyncHandler(async (req, res) => {
-  const { name, website } = req.body;
-  
-  // Check for duplicates
+  const cleanBody = { ...req.body };
+
+  // Sanitize numeric fields to prevent CastErrors
+  if (cleanBody.latitude === '' || cleanBody.latitude === undefined || isNaN(cleanBody.latitude)) {
+    delete cleanBody.latitude;
+  } else {
+    cleanBody.latitude = Number(cleanBody.latitude);
+  }
+
+  if (cleanBody.longitude === '' || cleanBody.longitude === undefined || isNaN(cleanBody.longitude)) {
+    delete cleanBody.longitude;
+  } else {
+    cleanBody.longitude = Number(cleanBody.longitude);
+  }
+
+  if (cleanBody.foundedYear === '' || cleanBody.foundedYear === undefined || isNaN(cleanBody.foundedYear)) {
+    delete cleanBody.foundedYear;
+  } else {
+    cleanBody.foundedYear = Number(cleanBody.foundedYear);
+  }
+
+  // Ensure required strings
+  if (!cleanBody.name) {
+    throw new ApiError(400, 'Company name is required');
+  }
+  if (!cleanBody.description) {
+    cleanBody.description = `${cleanBody.name} is a technology firm based in Bhubaneswar, Odisha.`;
+  }
+  if (!cleanBody.companyType) cleanBody.companyType = 'IT Services';
+  if (!cleanBody.address) cleanBody.address = 'Bhubaneswar, Odisha';
+  if (!cleanBody.area) cleanBody.area = 'Acharya Vihar';
+  if (!cleanBody.city) cleanBody.city = 'Bhubaneswar';
+  if (!cleanBody.state) cleanBody.state = 'Odisha';
+  if (!cleanBody.country) cleanBody.country = 'India';
+
+  const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const existingCompany = await Company.findOne({
     $or: [
-      { name: { $regex: new RegExp(`^${name}$`, 'i') } },
-      ...(website ? [{ website: { $regex: new RegExp(`^${website}$`, 'i') } }] : [])
+      { name: { $regex: new RegExp(`^${escapeRegex(cleanBody.name)}$`, 'i') } },
+      ...(cleanBody.website ? [{ website: { $regex: new RegExp(`^${escapeRegex(cleanBody.website)}$`, 'i') } }] : [])
     ]
   });
 
+  let company;
   if (existingCompany) {
-    throw new ApiError(409, 'This company already exists.');
+    company = await Company.findByIdAndUpdate(existingCompany._id, cleanBody, {
+      new: true,
+      runValidators: true,
+    });
+    return res.status(200).json(new ApiResponse(200, company, 'Company updated and saved successfully in database'));
   }
 
-  const company = await Company.create(req.body);
-
-  res.status(201).json(new ApiResponse(201, company, 'Company created successfully'));
+  company = await Company.create(cleanBody);
+  res.status(201).json(new ApiResponse(201, company, 'Company saved successfully in database'));
 });
 
 // ─── Update Company ───────────────────────────────────────────────────────────

@@ -141,8 +141,9 @@ const Home = () => {
         const response = await fetch('http://localhost:5000/api/v1/companies');
         const data = await response.json();
         if (data.success) {
+          const companyList = Array.isArray(data.data) ? data.data : (data.data?.companies || []);
           // Format API companies to match existing mock format
-          const formatted = data.data.map((c, i) => ({
+          const formatted = companyList.map((c) => ({
             id: 'api-' + c._id,
             name: c.name,
             category: c.companyType || 'Technology',
@@ -150,8 +151,8 @@ const Home = () => {
             jobs: 0,
             logo: c.name.charAt(0).toUpperCase(),
             bg: 'bg-purple-100 text-purple-800 font-bold text-lg',
-            lat: c.latitude || 20.2961 + (Math.random() * 0.05),
-            lng: c.longitude || 85.8245 + (Math.random() * 0.05),
+            lat: c.latitude || 20.3015,
+            lng: c.longitude || 85.8312,
             ...c
           }));
           setApiCompanies(formatted);

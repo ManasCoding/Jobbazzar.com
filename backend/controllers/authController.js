@@ -35,6 +35,7 @@ export const registerUser = asyncHandler(async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
+        token,
       },
       'Account created successfully'
     )
@@ -71,6 +72,7 @@ export const loginUser = asyncHandler(async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
+        token,
       },
       'Logged in successfully'
     )

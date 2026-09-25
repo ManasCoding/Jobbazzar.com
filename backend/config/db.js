@@ -1,4 +1,12 @@
+import dns from 'dns';
 import mongoose from 'mongoose';
+
+// Fix Node.js Windows SRV lookup issue for MongoDB Atlas clusters
+try {
+  dns.setServers(['8.8.8.8', '1.1.1.1']);
+} catch (e) {
+  console.warn('[DB] Could not set custom DNS servers:', e.message);
+}
 
 /**
  * Establishes a connection to MongoDB.
