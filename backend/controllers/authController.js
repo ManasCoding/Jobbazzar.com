@@ -25,7 +25,7 @@ export const registerUser = asyncHandler(async (req, res) => {
 
   const user = await User.create({ name, email, password, phone });
 
-  const token = generateToken(user._id);
+  const token = generateToken(res, user._id);
 
   res.status(201).json(
     new ApiResponse(
@@ -35,7 +35,6 @@ export const registerUser = asyncHandler(async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
-        token,
       },
       'Account created successfully'
     )
@@ -45,7 +44,7 @@ export const registerUser = asyncHandler(async (req, res) => {
 // ─── Login ────────────────────────────────────────────────────────────────────
 
 /**
- * @desc   Authenticate user and return token
+ * @desc   Authenticate user and return token in cookie
  * @route  POST /api/v1/auth/login
  * @access Public
  */
@@ -62,7 +61,7 @@ export const loginUser = asyncHandler(async (req, res) => {
     throw new ApiError(401, 'Invalid email or password');
   }
 
-  const token = generateToken(user._id);
+  const token = generateToken(res, user._id);
 
   res.json(
     new ApiResponse(
@@ -72,11 +71,26 @@ export const loginUser = asyncHandler(async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
-        token,
       },
       'Logged in successfully'
     )
   );
+});
+
+// ─── Logout ───────────────────────────────────────────────────────────────────
+
+/**
+ * @desc   Logout user and clear cookie
+ * @route  POST /api/v1/auth/logout
+ * @access Private
+ */
+export const logoutUser = asyncHandler(async (req, res) => {
+  res.cookie('jwt', '', {
+    httpOnly: true,
+    expires: new Date(0),
+  });
+
+  res.json(new ApiResponse(200, null, 'Logged out successfully'));
 });
 
 // ─── Get Current User ─────────────────────────────────────────────────────────

@@ -86,6 +86,20 @@ export const getCompanyById = asyncHandler(async (req, res) => {
  * @access Private / Admin
  */
 export const createCompany = asyncHandler(async (req, res) => {
+  const { name, website } = req.body;
+  
+  // Check for duplicates
+  const existingCompany = await Company.findOne({
+    $or: [
+      { name: { $regex: new RegExp(`^${name}$`, 'i') } },
+      ...(website ? [{ website: { $regex: new RegExp(`^${website}$`, 'i') } }] : [])
+    ]
+  });
+
+  if (existingCompany) {
+    throw new ApiError(409, 'This company already exists.');
+  }
+
   const company = await Company.create(req.body);
 
   res.status(201).json(new ApiResponse(201, company, 'Company created successfully'));

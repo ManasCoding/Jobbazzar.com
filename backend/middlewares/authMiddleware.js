@@ -5,17 +5,20 @@ import ApiError from '../utils/ApiError.js';
 
 /**
  * protect
- * Verifies the Bearer JWT in the Authorization header.
+ * Verifies the JWT in the HttpOnly cookie.
  * Attaches the full user document (minus password) to req.user.
  */
 export const protect = asyncHandler(async (req, res, next) => {
-  const authHeader = req.headers.authorization;
+  let token = req.cookies.jwt;
 
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    throw new ApiError(401, 'Not authorized — no token provided');
+  // Fallback for API clients sending Bearer token
+  if (!token && req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+    token = req.headers.authorization.split(' ')[1];
   }
 
-  const token = authHeader.split(' ')[1];
+  if (!token) {
+    throw new ApiError(401, 'Not authorized — no token provided');
+  }
 
   const decoded = jwt.verify(token, process.env.JWT_SECRET);
 

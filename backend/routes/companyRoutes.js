@@ -8,14 +8,18 @@ import {
   saveCompany,
   unsaveCompany,
 } from '../controllers/companyController.js';
+import { fetchCompanyData } from '../controllers/fetchCompanyInfo.js';
 import { protect, authorizeRoles } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
 
+// Fetch company data dynamically (public Clearbit API — no auth needed)
+router.post('/fetch', fetchCompanyData);
+
 router
   .route('/')
   .get(getAllCompanies)                               // Public
-  .post(protect, authorizeRoles('admin'), createCompany); // Admin only
+  .post(protect, authorizeRoles('admin'), createCompany); // Now protected for admins
 
 router
   .route('/:id')

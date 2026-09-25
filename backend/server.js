@@ -7,6 +7,7 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import routes from './routes/index.js';
 import { notFound, errorHandler } from './middlewares/errorMiddleware.js';
+import cookieParser from 'cookie-parser';
 
 // ─── Validate environment variables ───────────────────────────────────────────
 validateEnv();
@@ -40,6 +41,7 @@ if (process.env.NODE_ENV === 'development') {
 // Parse incoming JSON bodies
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+app.use(cookieParser());
 
 // ─── Health Check ─────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {

@@ -10,9 +10,9 @@ const companySchema = new mongoose.Schema({
   whatsapp: { type: String },
   address: { type: String, required: true },
   area: { type: String, required: true },
-  city: { type: String, default: 'Bhubaneswar', enum: ['Bhubaneswar'], required: true },
-  state: { type: String, default: 'Odisha', enum: ['Odisha'], required: true },
-  country: { type: String, default: 'India', enum: ['India'], required: true },
+  city: { type: String, default: 'Bhubaneswar', required: true },
+  state: { type: String, default: 'Odisha', required: true },
+  country: { type: String, default: 'India', required: true },
   latitude: { type: Number },
   longitude: { type: Number },
   industry: { type: mongoose.Schema.Types.ObjectId, ref: 'Industry' },
@@ -25,6 +25,7 @@ const companySchema = new mongoose.Schema({
   linkedin: { type: String },
   instagram: { type: String },
   facebook: { type: String },
+  careersUrl: { type: String },
 }, { timestamps: true });
 
 const Company = mongoose.model('Company', companySchema);
