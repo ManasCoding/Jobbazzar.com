@@ -10,16 +10,23 @@ try {
 
 /**
  * Establishes a connection to MongoDB.
- * Exits the process on failure so the server never starts in a broken state.
+ * On failure: logs a warning and continues (server keeps running).
+ * Fix: go to MongoDB Atlas → Network Access → Add IP Address → Allow Access From Anywhere (0.0.0.0/0)
  */
 const connectDB = async () => {
   try {
-    const conn = await mongoose.connect(process.env.MONGO_URI);
+    const conn = await mongoose.connect(process.env.MONGO_URI, {
+      serverSelectionTimeoutMS: 8000,
+    });
     console.log(`[DB] MongoDB Connected: ${conn.connection.host}`);
   } catch (error) {
     console.error(`[DB] Connection Error: ${error.message}`);
-    process.exit(1);
+    console.warn('[DB] ⚠️  Server will continue running WITHOUT database.');
+    console.warn('[DB] ➜  Fix: Go to MongoDB Atlas → Network Access → Add IP: 0.0.0.0/0');
+    console.warn('[DB] ➜  Company Fetch (AI) still works. Save/Login will fail until DB is fixed.');
+    // DO NOT exit — keep server running so fetch API works
   }
 };
 
 export default connectDB;
+

@@ -15,6 +15,7 @@ const companySchema = new mongoose.Schema({
   country: { type: String, default: 'India', required: true },
   latitude: { type: Number },
   longitude: { type: Number },
+  googleMapUrl: { type: String },
   industry: { type: mongoose.Schema.Types.ObjectId, ref: 'Industry' },
   companyType: { type: String, required: true },
   foundedYear: { type: Number },

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useRef } from 'react';
 import axios from 'axios';
 import AdminLayout from '../components/AdminLayout';
 import { 
@@ -26,10 +26,9 @@ const AdminCompanies = () => {
     city: 'Bhubaneswar',
     state: 'Odisha',
     country: 'India',
+    googleMapUrl: '',
     foundedYear: '',
     employeeCount: '',
-    latitude: 20.3015,
-    longitude: 85.8312,
   };
   
   const [formData, setFormData] = useState(initialFormState);
@@ -38,6 +37,39 @@ const AdminCompanies = () => {
   const [isFetching, setIsFetching] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [fetchName, setFetchName] = useState('');
+  const [aiSuggestions, setAiSuggestions] = useState([]);
+  const [showAiSuggestions, setShowAiSuggestions] = useState(false);
+  const aiDropdownRef = useRef(null);
+
+  // Fetch Bhubaneswar company suggestions as admin types in Add modal
+  useEffect(() => {
+    let isMounted = true;
+    const fetchAiSuggestions = async () => {
+      try {
+        const res = await axios.get(`http://localhost:5000/api/v1/companies/suggestions?q=${encodeURIComponent(fetchName)}`);
+        if (isMounted && res.data?.success) {
+          setAiSuggestions(res.data.data || []);
+        }
+      } catch (_) {}
+    };
+
+    const timer = setTimeout(fetchAiSuggestions, 150);
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, [fetchName]);
+
+  // Click outside to close AI suggestion dropdown
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (aiDropdownRef.current && !aiDropdownRef.current.contains(e.target)) {
+        setShowAiSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Live Companies from MongoDB
   const [companies, setCompanies] = useState([]);
@@ -66,8 +98,9 @@ const AdminCompanies = () => {
 
   const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
-  const handleFetchData = async () => {
-    if (!fetchName.trim()) {
+  const handleFetchData = async (nameOverride) => {
+    const targetName = (typeof nameOverride === 'string' ? nameOverride : fetchName).trim();
+    if (!targetName) {
       setError('Please enter a company name to fetch.');
       return;
     }
@@ -75,6 +108,7 @@ const AdminCompanies = () => {
     setIsFetching(true);
     setError('');
     setMessage('');
+    setShowAiSuggestions(false);
     
     if (!userInfo || userInfo.role !== 'admin') {
       setError('You are not authorized. Please log in as an admin.');
@@ -97,20 +131,26 @@ const AdminCompanies = () => {
         phone: fetchedData.phone || formData.phone || '',
         email: fetchedData.email || formData.email || '',
         address: fetchedData.address || formData.address || '',
-        area: fetchedData.area || formData.area || 'Acharya Vihar',
-        city: fetchedData.city || formData.city || 'Bhubaneswar',
-        state: fetchedData.state || formData.state || 'Odisha',
+        area: fetchedData.area || formData.area || '',
+        city: fetchedData.city || formData.city || '',
+        state: fetchedData.state || formData.state || '',
         country: fetchedData.country || formData.country || 'India',
-        companyType: fetchedData.companyType || formData.companyType || 'IT Services',
+        googleMapUrl: fetchedData.googleMapUrl || (fetchedData.address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((fetchedData.name || fetchName) + ', ' + fetchedData.address)}` : ''),
+        companyType: fetchedData.companyType || formData.companyType || '',
         foundedYear: fetchedData.foundedYear || formData.foundedYear || '',
         employeeCount: fetchedData.employeeCount || formData.employeeCount || '',
-        latitude: fetchedData.latitude || formData.latitude || 20.3015,
-        longitude: fetchedData.longitude || formData.longitude || 85.8312,
+        latitude: fetchedData.latitude,
+        longitude: fetchedData.longitude,
       });
       
-      setMessage('✨ Data fetched! Basic info from LinkedIn, contact/links & Bhubaneswar location cross-verified from Website & LinkedIn.');
+      setMessage('✨ Data fetched! Basic info from LinkedIn, contacts & links from website & LinkedIn, and genuine location extracted.');
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to fetch company data');
+      const msg = err.response?.data?.message;
+      if (err.code === 'ERR_NETWORK' || err.message?.includes('Network Error')) {
+        setError('⚠️ Could not reach the server. Please make sure the backend is running on port 5000.');
+      } else {
+        setError(msg || 'Failed to fetch company data. Try typing the company name more specifically, or paste the LinkedIn URL.');
+      }
     } finally {
       setIsFetching(false);
     }
@@ -131,8 +171,8 @@ const AdminCompanies = () => {
     try {
       const payload = {
         ...formData,
-        latitude: parseFloat(formData.latitude) || 20.3015,
-        longitude: parseFloat(formData.longitude) || 85.8312,
+        latitude: formData.latitude !== undefined && formData.latitude !== '' ? parseFloat(formData.latitude) : undefined,
+        longitude: formData.longitude !== undefined && formData.longitude !== '' ? parseFloat(formData.longitude) : undefined,
         foundedYear: formData.foundedYear ? parseInt(formData.foundedYear, 10) : undefined
       };
       await axios.post('http://localhost:5000/api/v1/companies', payload);
@@ -174,7 +214,7 @@ const AdminCompanies = () => {
           <div>
             <h2 className="text-2xl font-bold text-gray-900">Companies Management</h2>
             <p className="text-sm text-gray-500 mt-1">
-              View, add, and manage all verified companies located in Bhubaneswar, Odisha.
+              View, add, and manage all verified companies. Search, filter, and add any company from any city or industry.
             </p>
           </div>
           <button 
@@ -343,12 +383,16 @@ const AdminCompanies = () => {
                           <MapPin className="w-3.5 h-3.5 text-blue-600 shrink-0 mt-0.5" />
                           <div className="min-w-0">
                             <p className="text-xs font-bold text-gray-800">{company.area || 'Acharya Vihar'}, {company.city || 'Bhubaneswar'}</p>
-                            <p className="text-[11px] text-gray-500 truncate" title={company.address}>{company.address || 'Bhubaneswar, Odisha'}</p>
-                            {company.latitude && company.longitude && (
-                              <p className="text-[10px] text-gray-400 font-mono mt-0.5">
-                                {company.latitude.toFixed(4)}, {company.longitude.toFixed(4)}
-                              </p>
-                            )}
+                            <p className="text-[11px] text-gray-500 truncate" title={company.address}>{company.address || 'Address not available'}</p>
+                            <a 
+                              href={company.googleMapUrl || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(company.name + ', ' + (company.address || company.area))}`} 
+                              target="_blank" 
+                              rel="noopener noreferrer" 
+                              className="text-[11px] text-blue-600 hover:text-blue-800 font-semibold mt-0.5 inline-flex items-center gap-1 hover:underline"
+                              title="Open verified location on Google Maps"
+                            >
+                              <ExternalLink className="w-2.5 h-2.5" /> View on Google Maps
+                            </a>
                           </div>
                         </div>
                       </td>
@@ -456,7 +500,7 @@ const AdminCompanies = () => {
                 </div>
                 <div>
                   <h2 className="text-lg font-bold text-gray-900 leading-tight">Add New Company</h2>
-                  <p className="text-xs text-gray-500">Auto-fill via LinkedIn & Web Grounding (Bhubaneswar, Odisha)</p>
+                  <p className="text-xs text-gray-500">Auto-fill via LinkedIn & Web — any company, any city</p>
                 </div>
               </div>
               <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-700 bg-white rounded-full p-1.5 border shadow-sm cursor-pointer">
@@ -492,30 +536,111 @@ const AdminCompanies = () => {
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
-                  <input 
-                    type="text" 
-                    value={fetchName} 
-                    onChange={(e) => setFetchName(e.target.value)} 
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        handleFetchData();
-                      }
-                    }}
-                    className="flex-1 border border-blue-200 bg-white p-2.5 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" 
-                    placeholder="Enter company name (e.g., Oditech Global Pvt Ltd, Tatwa Technologies)" 
-                  />
+                  <div className="relative flex-1" ref={aiDropdownRef}>
+                    <input 
+                      type="text" 
+                      value={fetchName} 
+                      onChange={(e) => {
+                        setFetchName(e.target.value);
+                        setShowAiSuggestions(true);
+                      }} 
+                      onFocus={() => setShowAiSuggestions(true)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleFetchData();
+                        }
+                      }}
+                      className="w-full border border-blue-200 bg-white p-2.5 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" 
+                      placeholder="Enter company name + city (e.g. MSC Hiretech Bhubaneswar, Oditech Global, https://linkedin.com/...)..." 
+                    />
+
+                    {/* Auto-Suggestion Dropdown */}
+                    {showAiSuggestions && aiSuggestions.length > 0 && (
+                      <div className="absolute left-0 right-0 top-12 bg-white rounded-xl shadow-xl border border-blue-100 overflow-hidden z-50 max-h-60 overflow-y-auto">
+                        <div className="px-3 py-1.5 bg-blue-50 border-b border-blue-100 text-[11px] font-bold text-blue-900 flex items-center justify-between">
+                          <span className="flex items-center gap-1">
+                            <MapPin className="w-3 h-3 text-blue-600" /> Bhubaneswar Companies
+                          </span>
+                          <span className="text-[10px] text-blue-600 font-normal">Click to auto-fill</span>
+                        </div>
+                        <div className="divide-y divide-gray-100">
+                          {aiSuggestions.map((sug, i) => (
+                            <div
+                              key={i}
+                              onClick={() => {
+                                setFetchName(sug.name);
+                                setShowAiSuggestions(false);
+                                handleFetchData(sug.name);
+                              }}
+                              className="p-2.5 hover:bg-blue-50 cursor-pointer flex items-center justify-between transition-colors group"
+                            >
+                              <div className="flex items-center gap-2.5">
+                                {sug.logo ? (
+                                  <img 
+                                    src={sug.logo} 
+                                    alt="logo" 
+                                    className="w-7 h-7 rounded-md object-contain bg-white border p-0.5 shrink-0" 
+                                    onError={(e) => { e.target.style.display = 'none'; }}
+                                  />
+                                ) : (
+                                  <div className="w-7 h-7 rounded-md bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-xs shrink-0">
+                                    {sug.name.charAt(0).toUpperCase()}
+                                  </div>
+                                )}
+                                <div>
+                                  <p className="text-xs font-bold text-gray-900 group-hover:text-blue-600 leading-tight">
+                                    {sug.name}
+                                  </p>
+                                  <p className="text-[11px] text-gray-500 flex items-center gap-1.5 mt-0.5">
+                                    <span className="text-emerald-700 font-semibold bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded text-[10px] flex items-center gap-0.5">
+                                      <MapPin className="w-2.5 h-2.5" /> {sug.area}
+                                    </span>
+                                    <span>• {sug.companyType}</span>
+                                    {sug.phone && <span className="text-gray-400">• {sug.phone}</span>}
+                                  </p>
+                                </div>
+                              </div>
+                              <span className="text-[11px] text-blue-600 font-bold opacity-0 group-hover:opacity-100 transition-opacity">
+                                Auto-Fill ⚡
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Search any company with AI */}
+                        {fetchName.trim().length > 1 && (
+                          <div
+                            onClick={() => {
+                              setShowAiSuggestions(false);
+                              handleFetchData(fetchName);
+                            }}
+                            className="p-2.5 bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 hover:from-blue-100 hover:to-indigo-100 cursor-pointer flex items-center justify-between text-blue-900 font-bold text-xs border-t border-blue-200 transition-colors"
+                          >
+                            <span className="flex items-center gap-1.5">
+                              <Sparkles className="w-3.5 h-3.5 text-blue-600 animate-spin" />
+                              <span>Fetch ALL information for "{fetchName}" with AI</span>
+                            </span>
+                            <span className="bg-blue-600 text-white px-2.5 py-0.5 rounded text-[10px] shadow-xs font-semibold">
+                              Auto-Fill ⚡
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
                   <button 
                     type="button"
-                    onClick={handleFetchData}
+                    onClick={() => handleFetchData()}
                     disabled={isFetching}
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg text-sm font-bold transition-colors disabled:opacity-70 flex items-center gap-2 min-w-[160px] justify-center cursor-pointer shadow-sm"
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg text-sm font-bold transition-colors disabled:opacity-70 flex items-center gap-2 min-w-[160px] justify-center cursor-pointer shadow-sm shrink-0"
                   >
                     {isFetching ? <><Loader2 className="w-4 h-4 animate-spin" /> Fetching...</> : <><Sparkles className="w-4 h-4" /> Fetch Company Data</>}
                   </button>
                 </div>
                 <p className="text-[11px] text-gray-500 mt-2">
-                  Basic information is retrieved from LinkedIn, contacts & links are cross-searched across website and LinkedIn, and location is strictly verified for Bhubaneswar, Odisha.
+                  💡 <span className="font-semibold text-blue-700">Tip:</span> Include the city (e.g. <span className="text-gray-800 font-semibold">MSC Hiretech Bhubaneswar</span>) or paste the direct LinkedIn URL for the most accurate registered office address and Google Maps location.
                 </p>
               </div>
 
@@ -631,13 +756,13 @@ const AdminCompanies = () => {
                   <div className="col-span-2 flex items-center justify-between border-b pb-2 mb-1 mt-4">
                     <h3 className="text-sm font-bold text-gray-900">3. Location Details</h3>
                     <span className="text-[11px] font-semibold text-purple-700 bg-purple-50 border border-purple-100 px-2.5 py-0.5 rounded-full">
-                      Cross-verified from Website & LinkedIn • Bhubaneswar, Odisha
+                      Genuine Location from LinkedIn & Google Maps
                     </span>
                   </div>
                   
                   <div className="col-span-2">
                     <label className="block text-xs font-bold text-gray-700 mb-1 uppercase tracking-wider">Full Street Address *</label>
-                    <input type="text" name="address" value={formData.address} onChange={handleChange} required className="w-full border border-gray-200 bg-gray-50/50 p-2.5 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="Plot No, Road, Locality, Bhubaneswar, Odisha PIN" />
+                    <input type="text" name="address" value={formData.address} onChange={handleChange} required className="w-full border border-gray-200 bg-gray-50/50 p-2.5 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="e.g. 3rd Floor, Plot 15, MG Road, Koramangala, Bengaluru 560034" />
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-gray-700 mb-1 uppercase tracking-wider">Area / Locality *</label>
@@ -655,13 +780,45 @@ const AdminCompanies = () => {
                     <label className="block text-xs font-bold text-gray-700 mb-1 uppercase tracking-wider">Country *</label>
                     <input type="text" name="country" value={formData.country} onChange={handleChange} required className="w-full border border-gray-200 bg-gray-50/50 p-2.5 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" />
                   </div>
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1 uppercase tracking-wider">Latitude</label>
-                    <input type="number" step="any" name="latitude" value={formData.latitude} onChange={handleChange} className="w-full border border-gray-200 bg-gray-50/50 p-2.5 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="20.3015" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1 uppercase tracking-wider">Longitude</label>
-                    <input type="number" step="any" name="longitude" value={formData.longitude} onChange={handleChange} className="w-full border border-gray-200 bg-gray-50/50 p-2.5 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="85.8312" />
+
+                  {/* Google Map Link */}
+                  <div className="col-span-2">
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">
+                        Google Map Location / Link
+                      </label>
+                      {formData.googleMapUrl && (
+                        <a 
+                          href={formData.googleMapUrl} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1 hover:underline"
+                        >
+                          <MapPin className="w-3.5 h-3.5 text-red-500" /> Verify on Google Maps ↗
+                        </a>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      <input 
+                        type="url" 
+                        name="googleMapUrl" 
+                        value={formData.googleMapUrl} 
+                        onChange={handleChange} 
+                        className="w-full border border-gray-200 bg-gray-50/50 p-2.5 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" 
+                        placeholder="https://www.google.com/maps/... (auto-generated from LinkedIn / Google Maps)" 
+                      />
+                      {formData.googleMapUrl && (
+                        <a 
+                          href={formData.googleMapUrl} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="px-3.5 py-2 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg text-blue-700 text-xs font-bold flex items-center gap-1 shrink-0 transition-colors"
+                          title="Open Google Maps in new tab"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" /> View Map
+                        </a>
+                      )}
+                    </div>
                   </div>
                 </div>
 

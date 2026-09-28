@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
+import axios from 'axios';
 import { MapContainer, TileLayer, Marker, ZoomControl, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import useSupercluster from 'use-supercluster';
 import { 
   MapPin, Search, ChevronDown, User, Building2, Rocket, 
   Users, Briefcase, Map, List, Globe, Navigation, X, CheckCircle2,
-  Telescope, Layers, Network, TrendingUp, ArrowRight, Map as MapIcon, ChevronRight
+  Telescope, Layers, Network, TrendingUp, ArrowRight, Map as MapIcon, ChevronRight,
+  Phone, Mail, Loader2, ExternalLink
 } from 'lucide-react';
 
 // Fix Leaflet icon issue
@@ -191,9 +193,166 @@ const Home = () => {
     options: { radius: 75, maxZoom: 15 } // At zoom 16+ it splits into individual markers
   });
 
+  // Search & Auto-Suggestions state (Bhubaneswar Grounded)
+  const [searchTerm, setSearchTerm] = useState('');
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const searchContainerRef = useRef(null);
+
+  // Fetch Bhubaneswar company suggestions as user types or focuses
+  useEffect(() => {
+    let isMounted = true;
+    const fetchSuggestions = async () => {
+      try {
+        setLoadingSuggestions(true);
+        const res = await axios.get(`http://localhost:5000/api/v1/companies/suggestions?q=${encodeURIComponent(searchTerm)}`);
+        if (isMounted && res.data?.success) {
+          setSuggestions(res.data.data || []);
+        }
+      } catch (err) {
+        console.error('Failed to fetch company suggestions:', err);
+      } finally {
+        if (isMounted) setLoadingSuggestions(false);
+      }
+    };
+
+    const timer = setTimeout(fetchSuggestions, 180);
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, [searchTerm]);
+
+  // Click outside to close suggestion dropdown
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target)) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const handleCompanyClick = (company) => {
     setSelectedCompany(company);
     setShowRightCard(true);
+  };
+
+  const handleSelectSuggestion = (sug) => {
+    setSearchTerm(sug.name);
+    setShowSuggestions(false);
+
+    const lat = sug.latitude || 20.2961;
+    const lng = sug.longitude || 85.8245;
+
+    if (mapRef.current) {
+      mapRef.current.setView([lat, lng], 15, { animate: true });
+    }
+
+    const compData = {
+      id: sug._id || `sug-${sug.name}`,
+      name: sug.name,
+      category: sug.companyType || 'IT Services',
+      location: sug.address || (sug.area ? `${sug.area}, Bhubaneswar` : 'Bhubaneswar'),
+      area: sug.area || 'Bhubaneswar',
+      city: sug.city || 'Bhubaneswar',
+      jobs: 0,
+      logo: sug.logo ? (
+        <img src={sug.logo} alt="Logo" className="w-full h-full object-contain p-1" />
+      ) : (
+        <div className="w-full h-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center">
+          {sug.name.charAt(0).toUpperCase()}
+        </div>
+      ),
+      bg: 'bg-white',
+      lat,
+      lng,
+      website: sug.website || '',
+      phone: sug.phone || '',
+      email: sug.email || '',
+      address: sug.address || '',
+      employeeCount: sug.employeeCount || '',
+      foundedYear: sug.foundedYear || '',
+      description: sug.description || ''
+    };
+
+    setSelectedCompany(compData);
+    setShowRightCard(true);
+  };
+
+  // Dynamic Live Company Researcher for ANY company in Bhubaneswar
+  const [isDynamicFetching, setIsDynamicFetching] = useState(false);
+  const [dynamicFetchStatus, setDynamicFetchStatus] = useState('');
+
+  const handleLiveCompanyFetch = async (queryName) => {
+    const target = (queryName || searchTerm).trim();
+    if (!target) return;
+
+    setIsDynamicFetching(true);
+    setDynamicFetchStatus(`AI is retrieving verified details for "${target}" across LinkedIn & Official Website...`);
+    setShowSuggestions(false);
+
+    try {
+      const res = await axios.post('http://localhost:5000/api/v1/companies/fetch', { companyName: target });
+      const comp = res.data.data;
+      if (comp && comp.name) {
+        const lat = parseFloat(comp.latitude) || 20.2961;
+        const lng = parseFloat(comp.longitude) || 85.8245;
+
+        const newComp = {
+          id: 'dynamic-' + comp.name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+          name: comp.name,
+          category: comp.companyType || 'IT Services',
+          location: comp.address || `${comp.area || 'Bhubaneswar'}, Odisha`,
+          area: comp.area || 'Bhubaneswar',
+          city: comp.city || 'Bhubaneswar',
+          jobs: 0,
+          logo: comp.logo ? (
+            <img src={comp.logo} alt="Logo" className="w-full h-full object-contain p-1" onError={(e) => { e.target.style.display = 'none'; }} />
+          ) : (
+            <div className="w-full h-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center">
+              {comp.name.charAt(0).toUpperCase()}
+            </div>
+          ),
+          bg: 'bg-white',
+          lat,
+          lng,
+          website: comp.website || '',
+          linkedin: comp.linkedin || '',
+          careersUrl: comp.careersUrl || '',
+          phone: comp.phone || '',
+          email: comp.email || '',
+          address: comp.address || `${comp.area || 'Bhubaneswar'}, Odisha`,
+          employeeCount: comp.employeeCount || '',
+          foundedYear: comp.foundedYear || '',
+          description: comp.description || ''
+        };
+
+        // Add to active apiCompanies so the marker drops onto map
+        setApiCompanies(prev => {
+          const filtered = prev.filter(c => c.name.toLowerCase() !== comp.name.toLowerCase());
+          return [newComp, ...filtered];
+        });
+
+        // Center map directly on the company coordinates
+        if (mapRef.current) {
+          mapRef.current.setView([lat, lng], 15, { animate: true });
+        }
+
+        // Open detailed company card
+        setSelectedCompany(newComp);
+        setShowRightCard(true);
+        setSearchTerm(comp.name);
+      }
+    } catch (err) {
+      console.error('Failed to fetch company details:', err);
+      alert(err.response?.data?.message || `Could not find verified information for "${target}".`);
+    } finally {
+      setIsDynamicFetching(false);
+      setDynamicFetchStatus('');
+    }
   };
 
   return (
@@ -211,15 +370,128 @@ const Home = () => {
           </div>
         </div>
 
-        <div className="flex-1 max-w-3xl px-8">
-          <div className="relative flex items-center w-full h-11 bg-gray-50 rounded-lg border border-gray-100 px-4">
-            <Search className="w-5 h-5 text-gray-400 mr-3" />
+        <div className="flex-1 max-w-3xl px-8 relative" ref={searchContainerRef}>
+          <div className="relative flex items-center w-full h-11 bg-gray-50 rounded-lg border border-gray-200 px-4 focus-within:border-[#5b61f4] focus-within:ring-2 focus-within:ring-blue-100 transition-all">
+            <Search className="w-5 h-5 text-gray-400 mr-3 shrink-0" />
             <input 
               type="text" 
-              placeholder="Search startups, companies, sectors, founders..." 
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setShowSuggestions(true);
+              }}
+              onFocus={() => setShowSuggestions(true)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleLiveCompanyFetch(searchTerm);
+                }
+              }}
+              placeholder="Search ANY company in Bhubaneswar (e.g. ESSPL, Silicon Techlabs, Muvi, CSM)..." 
               className="w-full bg-transparent outline-none text-sm text-gray-700 placeholder-gray-400"
             />
+            {isDynamicFetching ? (
+              <div className="flex items-center gap-1.5 text-xs text-blue-600 font-bold mr-2 shrink-0 animate-pulse">
+                <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+                <span>AI Researching...</span>
+              </div>
+            ) : loadingSuggestions ? (
+              <Loader2 className="w-4 h-4 text-blue-500 animate-spin mr-2 shrink-0" />
+            ) : null}
+            {searchTerm && (
+              <button 
+                onClick={() => setSearchTerm('')} 
+                className="text-gray-400 hover:text-gray-600 p-1 rounded-full cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
           </div>
+
+          {/* Autocomplete Suggestion Dropdown */}
+          {showSuggestions && (
+            <div className="absolute left-8 right-8 top-13 bg-white rounded-xl shadow-xl border border-gray-200 overflow-hidden z-50 animate-in fade-in-50 duration-150 max-h-[420px] overflow-y-auto">
+              <div className="px-4 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-100 flex items-center justify-between text-xs font-semibold text-blue-900">
+                <span className="flex items-center gap-1.5">
+                  <MapPin className="w-3.5 h-3.5 text-blue-600" /> Companies in & around Bhubaneswar
+                </span>
+                <span className="text-[11px] text-blue-600 font-medium">{suggestions.length} matched</span>
+              </div>
+
+              {suggestions.length > 0 && (
+                <div className="divide-y divide-gray-100 max-h-[300px] overflow-y-auto">
+                  {suggestions.map((sug, i) => (
+                    <div
+                      key={sug._id || i}
+                      onClick={() => handleSelectSuggestion(sug)}
+                      className="p-3 hover:bg-blue-50/60 cursor-pointer transition-colors flex items-center justify-between group"
+                    >
+                      <div className="flex items-center gap-3">
+                        {sug.logo ? (
+                          <img 
+                            src={sug.logo} 
+                            alt="logo" 
+                            className="w-9 h-9 rounded-lg object-contain bg-white border p-1 shadow-2xs shrink-0" 
+                            onError={(e) => { e.target.style.display = 'none'; }}
+                          />
+                        ) : (
+                          <div className="w-9 h-9 rounded-lg bg-blue-100 text-blue-700 font-bold flex items-center justify-center shrink-0 text-sm">
+                            {sug.name.charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-sm font-bold text-gray-900 group-hover:text-[#5b61f4] transition-colors leading-tight">
+                              {sug.name}
+                            </h4>
+                            {sug.area && (
+                              <span className="text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-0.5">
+                                <MapPin className="w-2.5 h-2.5" /> {sug.area}
+                              </span>
+                            )}
+                            {sug.companyType && (
+                              <span className="text-[10px] font-medium bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">
+                                {sug.companyType}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-xs text-gray-500 mt-0.5 flex items-center gap-3">
+                            {sug.address && (
+                              <span className="truncate max-w-[280px] text-gray-600">{sug.address}</span>
+                            )}
+                            {sug.phone && (
+                              <span className="flex items-center gap-1 font-medium text-gray-700 shrink-0">
+                                <Phone className="w-3 h-3 text-gray-400" /> {sug.phone}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <span className="text-xs font-semibold text-[#5b61f4] opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 shrink-0">
+                        View on Map →
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Dynamic AI Deep-Search option for ANY company */}
+              {searchTerm.trim().length > 1 && (
+                <div
+                  onClick={() => handleLiveCompanyFetch(searchTerm)}
+                  className="p-3 bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 hover:from-blue-100 hover:to-indigo-100 cursor-pointer flex items-center justify-between text-blue-900 font-bold text-xs border-t border-blue-200/80 transition-all shadow-inner"
+                >
+                  <span className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-blue-600 animate-spin" />
+                    <span>Retrieve ALL details for "{searchTerm}" in Bhubaneswar with AI</span>
+                  </span>
+                  <span className="bg-blue-600 text-white px-3 py-1 rounded-md text-[11px] shadow-sm font-semibold flex items-center gap-1">
+                    Research with AI ➔
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-4 w-72 justify-end">
@@ -478,31 +750,62 @@ const Home = () => {
                 </div>
 
                 <div className="flex flex-col gap-2 mt-4 text-sm text-gray-600">
-                  <div className="flex items-center gap-2">
-                    <MapPin className="w-4 h-4 text-gray-400" />
-                    <span>{selectedCompany.location}, Odisha</span>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-start gap-2 flex-1">
+                      <MapPin className="w-4 h-4 text-gray-400 shrink-0 mt-0.5" />
+                      <span className="text-xs text-gray-700 leading-snug">
+                        {selectedCompany.address || `${selectedCompany.location}, Odisha`}
+                      </span>
+                    </div>
+                    <a
+                      href={selectedCompany.googleMapUrl || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(selectedCompany.name + ', ' + (selectedCompany.address || selectedCompany.location))}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[11px] text-blue-600 hover:text-blue-800 font-semibold shrink-0 hover:underline flex items-center gap-0.5 mt-0.5"
+                      title="Open in Google Maps"
+                    >
+                      <ExternalLink className="w-3 h-3 text-blue-600" /> Map
+                    </a>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Globe className="w-4 h-4 text-gray-400" />
-                    <a href="#" className="text-[#5b61f4] hover:underline">www.{selectedCompany.name.toLowerCase().replace(/\s+/g, '')}.com</a>
+                  {selectedCompany.phone && (
+                    <div className="flex items-center gap-2">
+                      <Phone className="w-4 h-4 text-gray-400 shrink-0" />
+                      <a href={`tel:${selectedCompany.phone}`} className="text-xs text-gray-800 font-medium hover:text-[#5b61f4]">
+                        {selectedCompany.phone}
+                      </a>
+                    </div>
+                  )}
+                  {selectedCompany.email && (
+                    <div className="flex items-center gap-2">
+                      <Mail className="w-4 h-4 text-gray-400 shrink-0" />
+                      <a href={`mailto:${selectedCompany.email}`} className="text-xs text-gray-800 font-medium hover:text-[#5b61f4] truncate">
+                        {selectedCompany.email}
+                      </a>
+                    </div>
+                  )}
+                  {selectedCompany.website && (
+                    <div className="flex items-center gap-2">
+                      <Globe className="w-4 h-4 text-gray-400 shrink-0" />
+                      <a href={selectedCompany.website} target="_blank" rel="noopener noreferrer" className="text-xs text-[#5b61f4] font-medium hover:underline truncate">
+                        {selectedCompany.website}
+                      </a>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-6 mt-4 text-xs">
+                  <div>
+                    <span className="text-gray-500 font-medium">Founded:</span>{' '}
+                    <span className="text-gray-900 font-bold">{selectedCompany.foundedYear || '2020'}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500 font-medium">Team Size:</span>{' '}
+                    <span className="text-gray-900 font-bold">{selectedCompany.employeeCount || '11-50'}</span>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-6 mt-4 text-sm">
-                  <div><span className="text-gray-500 font-medium">Founded:</span> <span className="text-gray-900 font-medium">2022</span></div>
-                  <div><span className="text-gray-500 font-medium">Team Size:</span> <span className="text-gray-900 font-medium">11-50</span></div>
-                </div>
-
-                <div className="flex flex-wrap gap-2 mt-5">
-                  {['Web Development', 'AI Solutions', 'SaaS', 'Mobile App'].map(tag => (
-                    <span key={tag} className="bg-gray-50 border border-gray-200 text-gray-600 text-xs px-3 py-1 rounded-full font-medium">
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-
-                <p className="text-sm text-gray-600 mt-5 leading-relaxed">
-                  {selectedCompany.name} is a technology company providing innovative digital solutions, product development, and IT consulting services.
+                <p className="text-xs text-gray-600 mt-4 leading-relaxed bg-gray-50 p-3 rounded-xl border border-gray-100">
+                  {selectedCompany.description || `${selectedCompany.name} is a leading enterprise operating in ${selectedCompany.area || 'Bhubaneswar'}, Odisha.`}
                 </p>
 
                 {selectedCompany.jobs > 0 && (
@@ -527,9 +830,15 @@ const Home = () => {
                       <Globe className="w-4 h-4" /> No Website
                     </button>
                   )}
-                  <button className="flex items-center justify-center gap-2 text-sm font-medium text-gray-700 border border-gray-200 rounded-lg py-2.5 hover:bg-gray-50">
-                    <Navigation className="w-4 h-4" /> Directions
-                  </button>
+                  <a 
+                    href={selectedCompany.googleMapUrl || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(selectedCompany.name + ', ' + (selectedCompany.address || selectedCompany.location))}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-1.5 text-xs font-bold text-red-600 bg-red-50/60 border border-red-200 rounded-lg py-2.5 hover:bg-red-100 transition-colors"
+                    title="Open genuine company location on Google Maps"
+                  >
+                    <MapPin className="w-3.5 h-3.5 text-red-500" /> Google Maps ↗
+                  </a>
                   <button className="bg-[#5b61f4] text-white text-sm font-medium rounded-lg py-2.5 hover:bg-blue-700 transition-colors">
                     View Profile
                   </button>

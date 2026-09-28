@@ -3,6 +3,7 @@ import SavedCompany from '../models/SavedCompany.js';
 import asyncHandler from '../utils/asyncHandler.js';
 import ApiError from '../utils/ApiError.js';
 import ApiResponse from '../utils/ApiResponse.js';
+import { BHUBANESWAR_DIRECTORY } from './fetchCompanyInfo.js';
 
 // ─── Get All Companies ────────────────────────────────────────────────────────
 
@@ -211,4 +212,89 @@ export const unsaveCompany = asyncHandler(async (req, res) => {
   if (!saved) throw new ApiError(404, 'Saved company not found');
 
   res.json(new ApiResponse(200, null, 'Company removed from saved list'));
+});
+
+// ─── Company Suggestions (Bhubaneswar Grounded) ────────────────────────────────
+
+/**
+ * @desc   Get auto-complete suggestions for companies around Bhubaneswar
+ * @route  GET /api/v1/companies/suggestions
+ * @access Public
+ */
+export const getCompanySuggestions = asyncHandler(async (req, res) => {
+  const { q = '' } = req.query;
+  const query = q.trim().toLowerCase();
+
+  // 1. Fetch matching active companies from MongoDB
+  const mongoFilter = { isActive: true };
+  if (query) {
+    mongoFilter.$or = [
+      { name: { $regex: query, $options: 'i' } },
+      { area: { $regex: query, $options: 'i' } },
+      { companyType: { $regex: query, $options: 'i' } }
+    ];
+  }
+  const dbCompanies = await Company.find(mongoFilter).limit(10).lean();
+
+  // 2. Filter from BHUBANESWAR_DIRECTORY
+  const dirMatches = BHUBANESWAR_DIRECTORY.filter(c => {
+    if (!query) return true;
+    if (c.name.toLowerCase().includes(query)) return true;
+    if (c.area.toLowerCase().includes(query)) return true;
+    if (c.companyType.toLowerCase().includes(query)) return true;
+    if (c.aliases && c.aliases.some(a => a.toLowerCase().includes(query))) return true;
+    return false;
+  });
+
+  // 3. Merge and deduplicate by company name
+  const seenNames = new Set();
+  const suggestions = [];
+
+  for (const c of dbCompanies) {
+    const key = c.name.toLowerCase().trim();
+    if (!seenNames.has(key)) {
+      seenNames.add(key);
+      suggestions.push({
+        _id: c._id,
+        name: c.name,
+        area: c.area || 'Bhubaneswar',
+        city: c.city || 'Bhubaneswar',
+        companyType: c.companyType || 'IT Services',
+        website: c.website || '',
+        logo: c.logo || '',
+        phone: c.phone || '',
+        email: c.email || '',
+        address: c.address || '',
+        googleMapUrl: c.googleMapUrl || (c.address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(c.name + ', ' + c.address)}` : ''),
+        latitude: c.latitude,
+        longitude: c.longitude,
+        source: 'database'
+      });
+    }
+  }
+
+  for (const c of dirMatches) {
+    const key = c.name.toLowerCase().trim();
+    if (!seenNames.has(key)) {
+      seenNames.add(key);
+      suggestions.push({
+        name: c.name,
+        area: c.area,
+        city: c.city || 'Bhubaneswar',
+        companyType: c.companyType,
+        website: c.website,
+        logo: c.logo,
+        phone: c.phone,
+        email: c.email,
+        address: c.address,
+        googleMapUrl: c.googleMapUrl || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(c.name + ', ' + c.address)}`,
+        latitude: c.latitude,
+        longitude: c.longitude,
+        source: 'directory'
+      });
+    }
+    if (suggestions.length >= 20) break;
+  }
+
+  res.json(new ApiResponse(200, suggestions, 'Company suggestions fetched successfully'));
 });

@@ -1,8 +1,12 @@
 # Dependencies
 node_modules/
 
-# Environment variables — NEVER commit real secrets
+# Environment
 .env
+.env.*
+!.env.example
+scratch/
+test-*.js
 
 # Logs
 logs/
