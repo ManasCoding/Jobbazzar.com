@@ -720,11 +720,11 @@ const AdminCompanies = () => {
                   
                   <div>
                     <label className="block text-xs font-bold text-gray-700 mb-1 uppercase tracking-wider">Official Website URL</label>
-                    <input type="url" name="website" value={formData.website} onChange={handleChange} className="w-full border border-gray-200 bg-gray-50/50 p-2.5 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="https://..." />
+                    <input type="text" name="website" value={formData.website} onChange={handleChange} className="w-full border border-gray-200 bg-gray-50/50 p-2.5 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="https://..." />
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-gray-700 mb-1 uppercase tracking-wider">Company Logo URL</label>
-                    <input type="url" name="logo" value={formData.logo} onChange={handleChange} className="w-full border border-gray-200 bg-gray-50/50 p-2.5 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="https://..." />
+                    <input type="text" name="logo" value={formData.logo} onChange={handleChange} className="w-full border border-gray-200 bg-gray-50/50 p-2.5 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="https://..." />
                   </div>
 
                   {/* 2. Contact & Links */}
@@ -737,11 +737,11 @@ const AdminCompanies = () => {
                   
                   <div>
                     <label className="block text-xs font-bold text-gray-700 mb-1 uppercase tracking-wider">LinkedIn URL</label>
-                    <input type="url" name="linkedin" value={formData.linkedin} onChange={handleChange} className="w-full border border-gray-200 bg-gray-50/50 p-2.5 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="https://linkedin.com/company/..." />
+                    <input type="text" name="linkedin" value={formData.linkedin} onChange={handleChange} className="w-full border border-gray-200 bg-gray-50/50 p-2.5 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="https://linkedin.com/company/..." />
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-gray-700 mb-1 uppercase tracking-wider">Careers URL</label>
-                    <input type="url" name="careersUrl" value={formData.careersUrl} onChange={handleChange} className="w-full border border-gray-200 bg-gray-50/50 p-2.5 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="https://.../careers" />
+                    <input type="text" name="careersUrl" value={formData.careersUrl} onChange={handleChange} className="w-full border border-gray-200 bg-gray-50/50 p-2.5 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="https://.../careers" />
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-gray-700 mb-1 uppercase tracking-wider">Phone / Mobile Number</label>
@@ -800,7 +800,7 @@ const AdminCompanies = () => {
                     </div>
                     <div className="flex gap-2">
                       <input 
-                        type="url" 
+                        type="text" 
                         name="googleMapUrl" 
                         value={formData.googleMapUrl} 
                         onChange={handleChange} 

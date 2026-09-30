@@ -783,7 +783,7 @@ const AdminDashboard = () => {
                   <div>
                     <label className="block text-xs font-bold text-gray-700 mb-1 uppercase tracking-wider">Company Logo URL</label>
                     <input 
-                      type="url" 
+                      type="text" 
                       name="logo" 
                       value={formData.logo} 
                       onChange={handleChange} 
@@ -819,7 +819,7 @@ const AdminDashboard = () => {
                   <div>
                     <label className="block text-xs font-bold text-gray-700 mb-1 uppercase tracking-wider">Website URL</label>
                     <input 
-                      type="url" 
+                      type="text" 
                       name="website" 
                       value={formData.website} 
                       onChange={handleChange} 
@@ -830,7 +830,7 @@ const AdminDashboard = () => {
                   <div>
                     <label className="block text-xs font-bold text-gray-700 mb-1 uppercase tracking-wider">LinkedIn URL</label>
                     <input 
-                      type="url" 
+                      type="text" 
                       name="linkedin" 
                       value={formData.linkedin} 
                       onChange={handleChange} 
@@ -841,7 +841,7 @@ const AdminDashboard = () => {
                   <div>
                     <label className="block text-xs font-bold text-gray-700 mb-1 uppercase tracking-wider">Careers Page URL</label>
                     <input 
-                      type="url" 
+                      type="text" 
                       name="careersUrl" 
                       value={formData.careersUrl} 
                       onChange={handleChange} 
@@ -967,7 +967,7 @@ const AdminDashboard = () => {
                   </div>
                   <div className="flex gap-2">
                     <input 
-                      type="url" 
+                      type="text" 
                       name="googleMapUrl" 
                       value={formData.googleMapUrl} 
                       onChange={handleChange} 
