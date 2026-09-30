@@ -206,8 +206,8 @@ export const BHUBANESWAR_DIRECTORY = [
     city: 'Bhubaneswar',
     state: 'Odisha',
     country: 'India',
-    latitude: 20.3015,
-    longitude: 85.8312,
+    latitude: 20.2723,
+    longitude: 85.8455,
     logo: 'https://www.google.com/s2/favicons?domain=oditechglobal.com&sz=128'
   },
   {

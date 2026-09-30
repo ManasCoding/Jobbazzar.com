@@ -35,7 +35,7 @@ export const getAllCompanies = asyncHandler(async (req, res) => {
   if (isFeatured !== undefined) filter.isFeatured = isFeatured === 'true';
 
   const pageNum = Math.max(1, parseInt(page));
-  const limitNum = Math.min(50, Math.max(1, parseInt(limit)));
+  const limitNum = Math.min(10000, Math.max(1, parseInt(limit)));
   const skip = (pageNum - 1) * limitNum;
 
   const [companies, total] = await Promise.all([
