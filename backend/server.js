@@ -23,12 +23,27 @@ app.use(helmet());
 
 // CORS — allow configured origins
 const allowedOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(',')
-  : ['http://localhost:5173'];
+  ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim().replace(/['"]/g, '').replace(/\/$/, ''))
+  : [
+      'http://localhost:5173',
+      'http://localhost:3000',
+      'https://jobbazzar-com-frontend.vercel.app'
+    ];
 
 app.use(
   cors({
-    origin: allowedOrigins,
+    origin: function (origin, callback) {
+      // Allow requests with no origin (like mobile apps or curl requests)
+      // or if the origin is in our allowed list.
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        console.warn(`[CORS] Blocked origin: ${origin}`);
+        // To temporarily unblock everything during debugging, you could uncomment the next line:
+        // callback(null, true); 
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     credentials: true,
   })
 );
