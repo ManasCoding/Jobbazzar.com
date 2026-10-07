@@ -18,10 +18,7 @@ connectDB();
 // ─── Express App ──────────────────────────────────────────────────────────────
 const app = express();
 
-// Security: set various HTTP headers
-app.use(helmet());
-
-// CORS — allow configured origins
+// CORS — must be FIRST, before helmet and any other middleware
 const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim().replace(/['"]/g, '').replace(/\/$/, ''))
   : [
@@ -30,23 +27,28 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
       'https://jobbazzar-com-frontend.vercel.app'
     ];
 
-app.use(
-  cors({
-    origin: function (origin, callback) {
-      // Allow requests with no origin (like mobile apps or curl requests)
-      // or if the origin is in our allowed list.
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        console.warn(`[CORS] Blocked origin: ${origin}`);
-        // To temporarily unblock everything during debugging, you could uncomment the next line:
-        // callback(null, true); 
-        callback(new Error('Not allowed by CORS'));
-      }
-    },
-    credentials: true,
-  })
-);
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests with no origin (curl, Postman, mobile apps)
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.warn(`[CORS] Blocked origin: ${origin}`);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+};
+
+app.use(cors(corsOptions));
+
+// Handle OPTIONS preflight for all routes explicitly
+app.options('*', cors(corsOptions));
+
+// Security: set various HTTP headers (after cors)
+app.use(helmet());
 
 // HTTP request logger (development only)
 if (process.env.NODE_ENV === 'development') {
