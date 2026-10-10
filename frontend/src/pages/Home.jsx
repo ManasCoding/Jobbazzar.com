@@ -220,23 +220,27 @@ const Home = () => {
   // View Mode: 'map' | 'list'
   const [viewMode, setViewMode] = useState('map');
 
-  // Sidebar toggle state - default to open on desktop (>= 640px) and closed on mobile (< 640px) so map shows first
+  // Sidebar toggle state - default to open on desktop (>= 768px) and closed on mobile (< 768px) so map shows first
   const [showSidebar, setShowSidebar] = useState(() => {
     if (typeof window !== 'undefined') {
-      return window.innerWidth >= 640;
+      return window.innerWidth >= 768;
     }
     return false;
   });
 
-  // Adjust sidebar on window resize
+  // Ensure sidebar is closed when entering mobile viewport
   useEffect(() => {
     const handleResize = () => {
-      if (window.innerWidth < 640) {
-        // on mobile, keep it closed unless explicitly opened
+      if (window.innerWidth < 768) {
+        setShowSidebar(false);
       } else {
         setShowSidebar(true);
       }
     };
+    // Run once on mount to enforce screen check
+    if (window.innerWidth < 768) {
+      setShowSidebar(false);
+    }
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
@@ -1091,17 +1095,17 @@ const Home = () => {
         {showSidebar && (
           <div 
             onClick={() => setShowSidebar(false)}
-            className="sm:hidden fixed inset-0 bg-black/40 backdrop-blur-xs z-40 transition-opacity animate-in fade-in duration-200"
+            className="md:hidden fixed inset-0 bg-black/40 backdrop-blur-xs z-40 transition-opacity animate-in fade-in duration-200"
           />
         )}
 
         {/* Left Sidebar */}
         <div className={`
-          fixed sm:relative top-0 sm:top-auto bottom-0 left-0 h-full w-[85%] max-w-[320px] sm:w-80 bg-white border-r border-gray-100 overflow-y-auto no-scrollbar z-50 sm:z-10 p-4 sm:p-6 shadow-2xl sm:shadow-[2px_0_10px_rgba(0,0,0,0.02)] transition-transform duration-300 ease-in-out
-          ${showSidebar ? 'translate-x-0' : '-translate-x-full sm:translate-x-0'} flex flex-col
+          fixed md:relative top-0 md:top-auto bottom-0 left-0 h-full w-[85%] max-w-[320px] md:w-80 bg-white border-r border-gray-100 overflow-y-auto no-scrollbar z-50 md:z-10 p-4 md:p-6 shadow-2xl md:shadow-[2px_0_10px_rgba(0,0,0,0.02)] transition-transform duration-300 ease-in-out
+          ${showSidebar ? 'translate-x-0' : '-translate-x-full md:translate-x-0'} flex flex-col
         `}>
           {/* Mobile Sidebar Close Button */}
-          <div className="flex sm:hidden justify-between items-center mb-4 pb-2 border-b border-gray-100">
+          <div className="flex md:hidden justify-between items-center mb-4 pb-2 border-b border-gray-100">
             <h3 className="font-bold text-gray-900 text-lg">Menu</h3>
             <button onClick={() => setShowSidebar(false)} className="p-2 hover:bg-gray-100 rounded-lg">
               <X className="w-5 h-5 text-gray-500" />
