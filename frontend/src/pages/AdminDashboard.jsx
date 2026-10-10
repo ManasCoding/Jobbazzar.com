@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Building2, Briefcase, Users, FileText, Grid, Tag, 
   MapPin, TrendingUp, Settings, FileBarChart, LogOut, Search, Bell, 
   Calendar, MoreVertical, Plus, ChevronDown, Menu, CheckCircle2, AlertCircle,
-  Sparkles, Loader2, Globe, ExternalLink
+  Sparkles, Loader2, Globe, ExternalLink, ShieldCheck
 } from 'lucide-react';
 
 // --- MOCK DATA ---
@@ -238,8 +238,17 @@ const AdminDashboard = () => {
           <h2 className="text-2xl font-bold text-gray-900">Dashboard</h2>
           <p className="text-sm text-gray-500 mt-1">Welcome back, Admin! Here's what's happening on JobBazzar.</p>
         </div>
-        <div className="flex items-center gap-2 text-sm text-gray-600 font-medium bg-white px-4 py-2 border border-gray-200 rounded-lg shadow-sm">
-          Mon, 26 May 2025 <Calendar className="w-4 h-4" />
+        <div className="flex items-center gap-3">
+          <Link 
+            to="/admin-access" 
+            className="flex items-center gap-2 bg-[#0f172a] hover:bg-black text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm transition-all"
+          >
+            <ShieldCheck className="w-4 h-4 text-emerald-400" />
+            <span>Admin Access Control</span>
+          </Link>
+          <div className="flex items-center gap-2 text-sm text-gray-600 font-medium bg-white px-4 py-2 border border-gray-200 rounded-lg shadow-sm">
+            Mon, 26 May 2025 <Calendar className="w-4 h-4" />
+          </div>
         </div>
       </div>
 

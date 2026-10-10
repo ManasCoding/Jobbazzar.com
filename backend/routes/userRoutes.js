@@ -6,8 +6,11 @@ import {
   saveJob,
   unsaveJob,
   getMySavedCompanies,
+  getAllAdmins,
+  createAdminUser,
+  deleteAdminUser,
 } from '../controllers/userController.js';
-import { protect } from '../middlewares/authMiddleware.js';
+import { protect, authorizeRoles } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
 
@@ -21,4 +24,15 @@ router.route('/saved-jobs/:jobId').post(saveJob).delete(unsaveJob);
 
 router.route('/saved-companies').get(getMySavedCompanies);
 
+// Admin Access Control routes
+router
+  .route('/admins')
+  .get(authorizeRoles('admin'), getAllAdmins)
+  .post(authorizeRoles('admin'), createAdminUser);
+
+router
+  .route('/admins/:id')
+  .delete(authorizeRoles('admin'), deleteAdminUser);
+
 export default router;
+

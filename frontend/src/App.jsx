@@ -8,6 +8,7 @@ import AdminCompanies from './pages/AdminCompanies';
 import AdminJobs from './pages/AdminJobs';
 import AdminUsers from './pages/AdminUsers';
 import AdminApplications from './pages/AdminApplications';
+import AdminAccessControl from './pages/AdminAccessControl';
 
 const App = () => {
   return (
@@ -19,6 +20,7 @@ const App = () => {
       <Route path="/admin-jobs" element={<AdminJobs />} />
       <Route path="/admin-users" element={<AdminUsers />} />
       <Route path="/admin-applications" element={<AdminApplications />} />
+      <Route path="/admin-access" element={<AdminAccessControl />} />
     </Routes>
   );
 };

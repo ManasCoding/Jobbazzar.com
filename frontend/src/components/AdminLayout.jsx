@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import AuthContext from '../context/AuthContext';
 import { 
   LayoutDashboard, Building2, Briefcase, Users, FileText, Grid, Tag, 
-  MapPin, TrendingUp, Settings, FileBarChart, LogOut, Search, Bell, ChevronDown, Menu, Loader2 
+  MapPin, TrendingUp, Settings, FileBarChart, LogOut, Search, Bell, ChevronDown, Menu, Loader2, ShieldCheck 
 } from 'lucide-react';
 
 const AdminLayout = ({ children }) => {
@@ -93,6 +93,15 @@ const AdminLayout = ({ children }) => {
 
           <div className="text-[10px] font-bold text-gray-500 tracking-wider mb-3 px-4">ADMIN CONTROLS</div>
           <nav className="flex flex-col gap-1">
+            <Link 
+              to="/admin-access" 
+              className={`flex items-center gap-3 px-4 py-2 rounded-lg transition-colors text-sm font-medium ${
+                isActive('/admin-access') ? 'bg-blue-600/20 text-blue-400' : 'hover:bg-gray-800 hover:text-white'
+              }`}
+            >
+              <ShieldCheck className="w-4 h-4 opacity-70" />
+              Access Control
+            </Link>
             {[
               { icon: FileBarChart, label: 'Content Management' },
               { icon: TrendingUp, label: 'Reports & Analytics' },

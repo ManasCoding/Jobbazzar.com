@@ -117,3 +117,103 @@ export const getMySavedCompanies = asyncHandler(async (req, res) => {
 
   res.json(new ApiResponse(200, savedCompanies, 'Saved companies fetched successfully'));
 });
+
+// ─── Administrator Management (Super Admin & Admin Access Control) ─────────────
+
+/**
+ * @desc   Get all administrators
+ * @route  GET /api/v1/users/admins
+ * @access Private (Admin only)
+ */
+export const getAllAdmins = asyncHandler(async (req, res) => {
+  const admins = await User.find({ role: 'admin' })
+    .select('name email role createdAt updatedAt')
+    .sort({ createdAt: -1 });
+
+  res.json(new ApiResponse(200, admins, 'Admins retrieved successfully'));
+});
+
+/**
+ * @desc   Create a new administrator account
+ * @route  POST /api/v1/users/admins
+ * @access Private (Admin only)
+ */
+export const createAdminUser = asyncHandler(async (req, res) => {
+  const { name, email, password } = req.body;
+
+  if (!name || !email || !password) {
+    throw new ApiError(400, 'Full name, email address, and temporary password are required');
+  }
+
+  const existingUser = await User.findOne({ email: email.toLowerCase().trim() });
+  if (existingUser) {
+    if (existingUser.role === 'admin') {
+      throw new ApiError(409, 'An administrator account with this email already exists');
+    }
+    // Upgrade existing user to admin
+    existingUser.role = 'admin';
+    existingUser.name = name.trim();
+    existingUser.password = password; // Will be hashed by pre-save hook
+    await existingUser.save();
+    return res.status(200).json(
+      new ApiResponse(
+        200,
+        {
+          _id: existingUser._id,
+          name: existingUser.name,
+          email: existingUser.email,
+          role: existingUser.role,
+          createdAt: existingUser.createdAt,
+          updatedAt: existingUser.updatedAt,
+        },
+        'User upgraded to Administrator successfully'
+      )
+    );
+  }
+
+  const newAdmin = await User.create({
+    name: name.trim(),
+    email: email.toLowerCase().trim(),
+    password,
+    role: 'admin',
+  });
+
+  res.status(201).json(
+    new ApiResponse(
+      201,
+      {
+        _id: newAdmin._id,
+        name: newAdmin.name,
+        email: newAdmin.email,
+        role: newAdmin.role,
+        createdAt: newAdmin.createdAt,
+        updatedAt: newAdmin.updatedAt,
+      },
+      'Admin access granted successfully'
+    )
+  );
+});
+
+/**
+ * @desc   Revoke / Delete administrator account
+ * @route  DELETE /api/v1/users/admins/:id
+ * @access Private (Admin only)
+ */
+export const deleteAdminUser = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+
+  // Prevent self-deletion
+  if (req.user._id.toString() === id.toString()) {
+    throw new ApiError(400, 'You cannot revoke your own administrator account');
+  }
+
+  const adminUser = await User.findById(id);
+  if (!adminUser) {
+    throw new ApiError(404, 'Administrator account not found');
+  }
+
+  // Delete or revoke
+  await User.findByIdAndDelete(id);
+
+  res.json(new ApiResponse(200, null, 'Administrator account removed successfully'));
+});
