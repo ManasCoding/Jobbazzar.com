@@ -79,7 +79,7 @@ const createCompanyIcon = (company) => {
 // Stacked group icon — logos sit on top of each other, hover fans them out
 const createGroupIcon = (companies) => {
   const count = companies.length;
-  const spread = 36; // px distance each icon spreads when hovered
+  const spread = 42; // px distance each icon spreads when fanning out
 
   // Pre-compute spread positions in a fan/arc
   const positions = companies.map((_, i) => {
@@ -98,8 +98,8 @@ const createGroupIcon = (companies) => {
       : `<span style="font-size:14px;font-weight:700;color:#5b61f4;">${company.name?.charAt(0) || '?'}</span>`;
 
     return `
-      <div class="stacked-logo" style="z-index:${i};--xi:var(--x${i});--yi:var(--y${i});">
-        <div style="width:40px;height:40px;border-radius:50%;background:white;border:2px solid white;box-shadow:0 3px 10px rgba(0,0,0,0.18);overflow:hidden;display:flex;align-items:center;justify-content:center;">
+      <div class="stacked-logo" style="z-index:${i};--xi:var(--x${i});--yi:var(--y${i});--idx:${i};">
+        <div style="width:40px;height:40px;border-radius:50%;background:white;border:2px solid white;box-shadow:0 3px 12px rgba(0,0,0,0.15);overflow:hidden;display:flex;align-items:center;justify-content:center;transition:box-shadow 0.3s ease;">
           ${logoHtml}
         </div>
         <div class="logo-tooltip">${company.name}</div>
@@ -109,28 +109,36 @@ const createGroupIcon = (companies) => {
   return L.divIcon({
     html: `
       <style>
-        .group-stack { position:relative; width:44px; height:44px; }
+        .group-stack { position:relative; width:44px; height:44px; cursor:pointer; }
         .stacked-logo {
           position:absolute; top:0; left:0;
-          transition: transform 0.25s cubic-bezier(.34,1.56,.64,1), opacity 0.2s;
+          transition: transform 0.65s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.4s ease;
+          transition-delay: calc(var(--idx, 0) * 0.035s);
+          will-change: transform, opacity;
           cursor:pointer;
         }
         .group-stack:hover .stacked-logo {
-          transform: translate(var(--xi), var(--yi)) scale(1.08);
+          transform: translate(var(--xi), var(--yi)) scale(1.1);
         }
         .logo-tooltip {
-          position:absolute; bottom:calc(100% + 4px); left:50%; transform:translateX(-50%);
-          background:rgba(0,0,0,0.75); color:white; font-size:10px; white-space:nowrap;
-          padding:2px 6px; border-radius:4px; pointer-events:none;
-          opacity:0; transition:opacity 0.15s; z-index:99;
+          position:absolute; bottom:calc(100% + 6px); left:50%; transform:translateX(-50%);
+          background:rgba(17,24,39,0.9); backdrop-filter:blur(4px); color:white; font-size:10px; font-weight:600; white-space:nowrap;
+          padding:2.5px 7px; border-radius:5px; pointer-events:none;
+          opacity:0; transition:opacity 0.25s ease, transform 0.25s ease; z-index:99;
+          box-shadow:0 4px 12px rgba(0,0,0,0.2);
         }
-        .group-stack:hover .stacked-logo:hover .logo-tooltip { opacity:1; }
+        .group-stack:hover .stacked-logo:hover .logo-tooltip { opacity:1; transform:translateX(-50%) translateY(-2px); }
         .group-badge {
           position:absolute; top:-5px; right:-5px;
           background:#5b61f4; color:white; font-size:9px; font-weight:700;
-          width:18px; height:18px; border-radius:50%; display:flex;
+          width:19px; height:19px; border-radius:50%; display:flex;
           align-items:center; justify-content:center; border:2px solid white;
+          box-shadow:0 2px 6px rgba(91,97,244,0.3);
           z-index:99;
+          transition: transform 0.3s ease;
+        }
+        .group-stack:hover .group-badge {
+          transform: scale(0.92);
         }
       </style>
       <div class="group-stack" style="${posVars}">
@@ -310,8 +318,8 @@ const Home = () => {
     if (mapRef.current && radius !== 'All') {
       const zoomLevel = radius === '5' ? 13 : radius === '10' ? 12 : radius === '20' ? 11 : 10;
       mapRef.current.flyTo([BHUBANESWAR_CENTER.lat, BHUBANESWAR_CENTER.lng], zoomLevel, { 
-        duration: 0.8, 
-        easeLinearity: 0.25 
+        duration: 0.9, 
+        easeLinearity: 0.25
       });
     }
   };
@@ -1190,10 +1198,13 @@ const Home = () => {
                         icon={createGroupIcon(companyProps)}
                         eventHandlers={{
                           click: () => {
-                            const expansionZoom = Math.min(supercluster.getClusterExpansionZoom(cluster.id), 17.5);
-                            mapRef.current.flyTo([latitude, longitude], expansionZoom, { 
-                              duration: 0.75, 
-                              easeLinearity: 0.25 
+                            const currentZoom = mapRef.current ? mapRef.current.getZoom() : 12;
+                            const fullExpZoom = supercluster.getClusterExpansionZoom(cluster.id);
+                            // Smooth staged expansion: step up gracefully so companies smoothly separate
+                            const targetZoom = Math.min(Math.max(currentZoom + 1.5, Math.min(fullExpZoom, currentZoom + 2.25)), 17);
+                            mapRef.current.flyTo([latitude, longitude], targetZoom, { 
+                              duration: 1.1, 
+                              easeLinearity: 0.2 
                             });
                           }
                         }}
@@ -1214,10 +1225,12 @@ const Home = () => {
                       icon={createClusterIcon(pointCount, colorClass)}
                       eventHandlers={{
                         click: () => {
-                          const expansionZoom = Math.min(supercluster.getClusterExpansionZoom(cluster.id), 17.5);
-                          mapRef.current.flyTo([latitude, longitude], expansionZoom, { 
-                            duration: 0.75, 
-                            easeLinearity: 0.25 
+                          const currentZoom = mapRef.current ? mapRef.current.getZoom() : 12;
+                          const fullExpZoom = supercluster.getClusterExpansionZoom(cluster.id);
+                          const targetZoom = Math.min(Math.max(currentZoom + 1.5, Math.min(fullExpZoom, currentZoom + 2.25)), 17);
+                          mapRef.current.flyTo([latitude, longitude], targetZoom, { 
+                            duration: 1.1, 
+                            easeLinearity: 0.2 
                           });
                         }
                       }}
@@ -1233,9 +1246,11 @@ const Home = () => {
                     eventHandlers={{
                       click: () => {
                         handleCompanyClick(cluster.properties);
-                        mapRef.current.flyTo([latitude, longitude], 15.5, { 
-                          duration: 0.7, 
-                          easeLinearity: 0.25 
+                        const currentZoom = mapRef.current ? mapRef.current.getZoom() : 12;
+                        const targetZoom = Math.max(currentZoom, 14.5);
+                        mapRef.current.flyTo([latitude, longitude], targetZoom, { 
+                          duration: 0.85, 
+                          easeLinearity: 0.2 
                         });
                       }
                     }}
