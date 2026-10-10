@@ -426,7 +426,10 @@ const Home = () => {
   const allCompanies = filteredCompanies;
   const topCompanies = filteredCompanies.slice(0, 10);
 
-  const totalCompanies = filteredCompanies.length;
+  // Total available companies on the platform (fixed/persistent)
+  const totalCompanies = apiCompanies.length;
+  
+  // Specific segment counts based on the active filters
   const totalStartups = filteredCompanies.filter(c => {
     const cat = (c.category || '').toLowerCase();
     const ec = (c.employeeCount || '').toLowerCase();
