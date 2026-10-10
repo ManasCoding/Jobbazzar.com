@@ -220,8 +220,26 @@ const Home = () => {
   // View Mode: 'map' | 'list'
   const [viewMode, setViewMode] = useState('map');
 
-  // Sidebar toggle state
-  const [showSidebar, setShowSidebar] = useState(true);
+  // Sidebar toggle state - default to open on desktop (>= 640px) and closed on mobile (< 640px) so map shows first
+  const [showSidebar, setShowSidebar] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth >= 640;
+    }
+    return false;
+  });
+
+  // Adjust sidebar on window resize
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 640) {
+        // on mobile, keep it closed unless explicitly opened
+      } else {
+        setShowSidebar(true);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Close dropdown on click outside
   useEffect(() => {
@@ -510,6 +528,10 @@ const Home = () => {
   const handleCompanyClick = (company) => {
     setSelectedCompany(company);
     setShowRightCard(true);
+    // On mobile devices, close sidebar drawer so the map and selected company card are shown immediately
+    if (typeof window !== 'undefined' && window.innerWidth < 640) {
+      setShowSidebar(false);
+    }
   };
 
   const handleSelectSuggestion = (sug) => {
@@ -1065,10 +1087,18 @@ const Home = () => {
       {/* Main Content Area */}
       <div className="flex-1 flex overflow-hidden">
         
+        {/* Mobile Backdrop Overlay */}
+        {showSidebar && (
+          <div 
+            onClick={() => setShowSidebar(false)}
+            className="sm:hidden fixed inset-0 bg-black/40 backdrop-blur-xs z-40 transition-opacity animate-in fade-in duration-200"
+          />
+        )}
+
         {/* Left Sidebar */}
         <div className={`
-          absolute sm:relative top-0 bottom-0 left-0 h-full w-full sm:w-80 bg-white border-r border-gray-100 overflow-y-auto no-scrollbar z-40 sm:z-10 p-4 sm:p-6 shadow-2xl sm:shadow-[2px_0_10px_rgba(0,0,0,0.02)] transition-transform duration-300 ease-in-out
-          ${showSidebar ? 'translate-x-0' : '-translate-x-full sm:translate-x-0 sm:hidden'} flex flex-col
+          fixed sm:relative top-0 sm:top-auto bottom-0 left-0 h-full w-[85%] max-w-[320px] sm:w-80 bg-white border-r border-gray-100 overflow-y-auto no-scrollbar z-50 sm:z-10 p-4 sm:p-6 shadow-2xl sm:shadow-[2px_0_10px_rgba(0,0,0,0.02)] transition-transform duration-300 ease-in-out
+          ${showSidebar ? 'translate-x-0' : '-translate-x-full sm:translate-x-0'} flex flex-col
         `}>
           {/* Mobile Sidebar Close Button */}
           <div className="flex sm:hidden justify-between items-center mb-4 pb-2 border-b border-gray-100">
