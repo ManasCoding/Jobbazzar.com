@@ -9,7 +9,7 @@
   }
 }
 
-/* Smooth marker separation, division and entrance animations */
+/* Smooth marker separation, division and entrance animations on inner content (preserving Leaflet translate3d on parent) */
 @keyframes smoothMarkerDivide {
   0% {
     opacity: 0;
@@ -25,20 +25,18 @@
   }
 }
 
-.custom-company-icon {
-  animation: smoothMarkerDivide 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+.custom-company-icon > div {
+  animation: smoothMarkerDivide 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
   will-change: transform, opacity;
-  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.custom-cluster-icon {
-  animation: smoothMarkerDivide 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+.custom-cluster-icon > div {
+  animation: smoothMarkerDivide 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
   will-change: transform, opacity;
-  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.custom-group-icon {
-  animation: smoothMarkerDivide 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+.custom-group-icon > div {
+  animation: smoothMarkerDivide 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
   will-change: transform, opacity;
-  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
+

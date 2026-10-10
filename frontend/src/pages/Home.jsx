@@ -154,7 +154,7 @@ const createGroupIcon = (companies) => {
 
 
 // Map events component to update bounds & zoom for clustering
-const MapEvents = ({ setBounds, setZoom }) => {
+const MapEvents = ({ setBounds, setZoom, mapRef }) => {
   const map = useMapEvents({
     moveend: () => {
       setBounds(map.getBounds());
@@ -167,9 +167,11 @@ const MapEvents = ({ setBounds, setZoom }) => {
   });
 
   useEffect(() => {
+    if (mapRef) mapRef.current = map;
+    map.invalidateSize();
     setBounds(map.getBounds());
     setZoom(map.getZoom());
-  }, [map, setBounds, setZoom]);
+  }, [map, setBounds, setZoom, mapRef]);
 
   return null;
 };
@@ -457,7 +459,7 @@ const Home = () => {
     bounds.getSouthWest().lat,
     bounds.getNorthEast().lng,
     bounds.getNorthEast().lat
-  ] : null;
+  ] : [85.65, 20.15, 85.95, 20.45];
 
   // useSupercluster hook calculates the clusters automatically based on zoom & bounds
   const { clusters, supercluster } = useSupercluster({
@@ -1179,7 +1181,7 @@ const Home = () => {
                 url="https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?key=cb1_3t4j_1_5b91505d13706a020613c5ec"
               />
               
-              <MapEvents setBounds={setBounds} setZoom={setZoom} />
+              <MapEvents setBounds={setBounds} setZoom={setZoom} mapRef={mapRef} />
 
               {/* Render dynamic clusters and markers */}
               {clusters.map(cluster => {
