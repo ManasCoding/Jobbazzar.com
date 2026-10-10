@@ -309,7 +309,10 @@ const Home = () => {
     setActiveFilter(null);
     if (mapRef.current && radius !== 'All') {
       const zoomLevel = radius === '5' ? 13 : radius === '10' ? 12 : radius === '20' ? 11 : 10;
-      mapRef.current.setView([BHUBANESWAR_CENTER.lat, BHUBANESWAR_CENTER.lng], zoomLevel, { animate: true });
+      mapRef.current.flyTo([BHUBANESWAR_CENTER.lat, BHUBANESWAR_CENTER.lng], zoomLevel, { 
+        duration: 0.8, 
+        easeLinearity: 0.25 
+      });
     }
   };
 
@@ -452,7 +455,7 @@ const Home = () => {
   const { clusters, supercluster } = useSupercluster({
     points,
     bounds: mapBounds,
-    zoom,
+    zoom: Math.round(zoom),
     options: { radius: 75, maxZoom: 15 } // At zoom 16+ it splits into individual markers
   });
 
@@ -504,7 +507,7 @@ const Home = () => {
     const lng = sug.longitude || 85.8245;
 
     if (mapRef.current) {
-      mapRef.current.setView([lat, lng], 15, { animate: true });
+      mapRef.current.flyTo([lat, lng], 15.5, { duration: 0.75, easeLinearity: 0.25 });
     }
 
     const compData = {
@@ -592,9 +595,9 @@ const Home = () => {
           return [newComp, ...filtered];
         });
 
-        // Center map directly on the company coordinates
+        // Center map directly on the company coordinates with smooth flyTo
         if (mapRef.current) {
-          mapRef.current.setView([lat, lng], 15, { animate: true });
+          mapRef.current.flyTo([lat, lng], 15.5, { duration: 0.75, easeLinearity: 0.25 });
         }
 
         // Open detailed company card
@@ -1147,6 +1150,18 @@ const Home = () => {
             <MapContainer 
               center={[20.2961, 85.8245]} 
               zoom={12} 
+              minZoom={10}
+              maxZoom={18}
+              zoomSnap={0.25}
+              zoomDelta={0.5}
+              wheelPxPerZoomLevel={160}
+              wheelDebounceTime={80}
+              zoomAnimation={true}
+              zoomAnimationThreshold={8}
+              inertia={true}
+              inertiaDeceleration={3000}
+              inertiaMaxSpeed={1500}
+              easeLinearity={0.25}
               className="h-full w-full z-0"
               zoomControl={false}
               ref={mapRef}
@@ -1175,8 +1190,11 @@ const Home = () => {
                         icon={createGroupIcon(companyProps)}
                         eventHandlers={{
                           click: () => {
-                            const expansionZoom = Math.min(supercluster.getClusterExpansionZoom(cluster.id), 18);
-                            mapRef.current.setView([latitude, longitude], expansionZoom, { animate: true });
+                            const expansionZoom = Math.min(supercluster.getClusterExpansionZoom(cluster.id), 17.5);
+                            mapRef.current.flyTo([latitude, longitude], expansionZoom, { 
+                              duration: 0.75, 
+                              easeLinearity: 0.25 
+                            });
                           }
                         }}
                       />
@@ -1196,8 +1214,11 @@ const Home = () => {
                       icon={createClusterIcon(pointCount, colorClass)}
                       eventHandlers={{
                         click: () => {
-                          const expansionZoom = Math.min(supercluster.getClusterExpansionZoom(cluster.id), 18);
-                          mapRef.current.setView([latitude, longitude], expansionZoom, { animate: true });
+                          const expansionZoom = Math.min(supercluster.getClusterExpansionZoom(cluster.id), 17.5);
+                          mapRef.current.flyTo([latitude, longitude], expansionZoom, { 
+                            duration: 0.75, 
+                            easeLinearity: 0.25 
+                          });
                         }
                       }}
                     />
@@ -1212,7 +1233,10 @@ const Home = () => {
                     eventHandlers={{
                       click: () => {
                         handleCompanyClick(cluster.properties);
-                        mapRef.current.setView([latitude, longitude], 15, { animate: true });
+                        mapRef.current.flyTo([latitude, longitude], 15.5, { 
+                          duration: 0.7, 
+                          easeLinearity: 0.25 
+                        });
                       }
                     }}
                   />
@@ -1239,7 +1263,7 @@ const Home = () => {
                 </button>
               </div>
               <button 
-                onClick={() => mapRef.current?.setView([20.2961, 85.8245], 12, { animate: true })}
+                onClick={() => mapRef.current?.flyTo([20.2961, 85.8245], 12, { duration: 0.8, easeLinearity: 0.25 })}
                 className="bg-white rounded-lg shadow-sm border border-gray-100 p-2 text-gray-700 hover:bg-gray-50 active:bg-gray-100 cursor-pointer"
                 title="Reset to Central Bhubaneswar"
               >
@@ -1497,7 +1521,7 @@ const Home = () => {
                             setSelectedCompany(comp);
                             setShowRightCard(true);
                             if (mapRef.current) {
-                              mapRef.current.setView([comp.lat, comp.lng], 15, { animate: true });
+                              mapRef.current.flyTo([comp.lat, comp.lng], 15.5, { duration: 0.75, easeLinearity: 0.25 });
                             }
                           }}
                           className="text-[11px] font-bold text-[#5b61f4] hover:underline flex items-center gap-1 cursor-pointer"
