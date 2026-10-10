@@ -1137,29 +1137,29 @@ const Home = () => {
             <a href="#" className="text-xs font-medium text-[#5b61f4] hover:underline">View all</a>
           </div>
 
-          <div className="flex flex-col gap-3 flex-1">
+          <div className="flex flex-col gap-3.5 flex-1">
             {topCompanies.map((company, idx) => (
               <div 
                 key={idx} 
                 onClick={() => handleCompanyClick(company)}
-                className="flex items-center justify-between p-3 border border-gray-100 rounded-xl hover:border-blue-100 hover:bg-blue-50/30 transition-colors cursor-pointer bg-white shadow-sm"
+                className="flex flex-col gap-2 p-3.5 border border-gray-200/90 rounded-2xl hover:border-blue-400 hover:shadow-md transition-all cursor-pointer bg-white shadow-xs"
               >
-                <div className="flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${company.bg} overflow-hidden bg-white`}>
+                <div className="flex items-start gap-3">
+                  <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${company.bg} overflow-hidden bg-white border border-gray-100 shadow-xs p-1`}>
                     {company.logo && typeof company.logo === 'string' && company.logo.startsWith('http') ? (
-                      <img src={company.logo} alt="logo" className="w-full h-full object-contain p-1" />
+                      <img src={company.logo} alt="logo" className="w-full h-full object-contain" />
                     ) : (
-                      company.logo || company.name?.charAt(0) || ''
+                      <span className="font-bold text-[#5b61f4] text-base">{company.logo || company.name?.charAt(0) || ''}</span>
                     )}
                   </div>
-                  <div>
-                    <h4 className="font-semibold text-gray-900 text-sm leading-tight">{company.name}</h4>
-                    <p className="text-[11px] text-gray-500 mt-0.5">{company.category}</p>
-                    <p className="text-[10px] text-gray-400 mt-0.5">{company.location}</p>
+                  <div className="flex-1 min-w-0">
+                    <h4 className="font-bold text-gray-900 text-[13px] leading-snug line-clamp-2">{company.name}</h4>
+                    <p className="text-[11px] font-medium text-gray-500 mt-0.5 truncate">{company.category || 'IT Services and IT Consulting'}</p>
+                    <p className="text-[10px] text-gray-400 mt-1 line-clamp-2 leading-relaxed">{company.location || company.address}</p>
                   </div>
                 </div>
                 {company.jobs > 0 && (
-                  <div className="bg-[#f0f2ff] text-[#5b61f4] text-xs font-medium px-2.5 py-1 rounded-md whitespace-nowrap">
+                  <div className="self-start mt-1 bg-[#f0f2ff] text-[#5b61f4] text-[11px] font-semibold px-2.5 py-0.5 rounded-md">
                     {company.jobs} Jobs
                   </div>
                 )}
@@ -1167,7 +1167,7 @@ const Home = () => {
             ))}
           </div>
 
-          <button className="w-full mt-6 bg-[#eef0ff] text-[#5b61f4] font-medium py-3 rounded-xl text-sm flex items-center justify-center gap-2 hover:bg-[#e0e5ff] transition-colors">
+          <button className="w-full mt-6 bg-[#eef0ff] text-[#5b61f4] font-semibold py-3 rounded-xl text-sm flex items-center justify-center gap-2 hover:bg-[#e0e5ff] transition-colors">
             View All Companies <ArrowRight className="w-4 h-4" />
           </button>
         </div>
