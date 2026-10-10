@@ -8,7 +8,7 @@ import {
   MapPin, Search, ChevronDown, User, Building2, Building, Rocket, 
   Users, Briefcase, Map, List, Globe, Navigation, X, CheckCircle2,
   Telescope, Layers, Network, TrendingUp, ArrowRight, Map as MapIcon, ChevronRight,
-  Phone, Mail, Loader2, ExternalLink, Menu
+  Phone, Mail, Loader2, ExternalLink, Menu, Sparkles, Check, RotateCcw, SlidersHorizontal, Filter
 } from 'lucide-react';
 
 // Fix Leaflet icon issue
@@ -166,19 +166,54 @@ const MapEvents = ({ setBounds, setZoom }) => {
   return null;
 };
 
+// Bhubaneswar Reference Center for Radius calculations
+const BHUBANESWAR_CENTER = { lat: 20.2961, lng: 85.8245 };
+
+const calculateDistanceKm = (lat1, lon1, lat2, lon2) => {
+  if (!lat1 || !lon1 || !lat2 || !lon2) return 0;
+  const R = 6371; // Earth's radius in km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+};
+
 // Generate an initial mock database combining top companies and fake startups 
 // to demonstrate realistic geographical clustering across zoom levels.
 const Home = () => {
   const [showRightCard, setShowRightCard] = useState(false);
   const [selectedCompany, setSelectedCompany] = useState(null);
 
-  // Filter Dropdown state
+  // Filter Dropdown state (controls which dropdown menu is currently opened)
   const [activeFilter, setActiveFilter] = useState(null);
   const filterBarRef = useRef(null);
+
+  // Dropdown Filter Selection States
+  const [filterType, setFilterType] = useState('All Types');
+  const [filterCompanyType, setFilterCompanyType] = useState('All');
+  const [filterRadius, setFilterRadius] = useState('All');
+  const [filterSector, setFilterSector] = useState('All Sectors');
+  const [filterHiringNow, setFilterHiringNow] = useState(false);
+  const [moreFilters, setMoreFilters] = useState({
+    remoteOnly: false,
+    activelyHiring: false,
+    withSalary: false,
+    hasWebsite: false,
+  });
+
+  // View Mode: 'map' | 'list'
+  const [viewMode, setViewMode] = useState('map');
 
   // Sidebar toggle state
   const [showSidebar, setShowSidebar] = useState(true);
 
+  // Close dropdown on click outside
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (filterBarRef.current && !filterBarRef.current.contains(e.target)) {
@@ -207,11 +242,14 @@ const Home = () => {
             id: 'api-' + c._id,
             name: c.name,
             category: c.companyType || 'Technology',
+            companyType: c.companyType || 'Technology',
+            industry: c.industry?.name || c.companyType || 'Technology',
             location: c.address || (c.area ? `${c.area}, Bhubaneswar` : 'Bhubaneswar'),
             address: c.address || '',
             area: c.area || '',
             city: c.city || 'Bhubaneswar',
-            jobs: c.openJobs || 0,
+            jobs: c.openJobs || (c.isHiring ? 1 : 0),
+            isHiring: !!c.isHiring,
             logo: c.logo || c.name.charAt(0).toUpperCase(),
             bg: c.logo ? 'bg-white' : 'bg-[#eef0ff] text-[#5b61f4] font-bold text-lg',
             lat: parseFloat(c.latitude) || 20.3015,
@@ -234,29 +272,167 @@ const Home = () => {
     fetchCompanies();
   }, []);
 
-  const allCompanies = apiCompanies;
-  const topCompanies = apiCompanies.slice(0, 5);
+  // Search & Auto-Suggestions state (Bhubaneswar Grounded)
+  const [searchTerm, setSearchTerm] = useState('');
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const searchContainerRef = useRef(null);
 
-  const totalCompanies = allCompanies.length;
-  const totalStartups = allCompanies.filter(c => {
+  // Active filter count
+  const activeFilterCount =
+    (filterType !== 'All Types' ? 1 : 0) +
+    (filterCompanyType !== 'All' ? 1 : 0) +
+    (filterRadius !== 'All' ? 1 : 0) +
+    (filterSector !== 'All Sectors' ? 1 : 0) +
+    (filterHiringNow ? 1 : 0) +
+    (moreFilters.remoteOnly || moreFilters.activelyHiring || moreFilters.hasWebsite ? 1 : 0);
+
+  const clearAllFilters = () => {
+    setFilterType('All Types');
+    setFilterCompanyType('All');
+    setFilterRadius('All');
+    setFilterSector('All Sectors');
+    setFilterHiringNow(false);
+    setMoreFilters({
+      remoteOnly: false,
+      activelyHiring: false,
+      withSalary: false,
+      hasWebsite: false,
+    });
+    setSearchTerm('');
+    setActiveFilter(null);
+  };
+
+  const handleRadiusChange = (radius) => {
+    setFilterRadius(radius);
+    setActiveFilter(null);
+    if (mapRef.current && radius !== 'All') {
+      const zoomLevel = radius === '5' ? 13 : radius === '10' ? 12 : radius === '20' ? 11 : 10;
+      mapRef.current.setView([BHUBANESWAR_CENTER.lat, BHUBANESWAR_CENTER.lng], zoomLevel, { animate: true });
+    }
+  };
+
+  // Dynamic Filtering based on all active dropdowns and search inputs
+  const filteredCompanies = apiCompanies.filter((company) => {
+    // 1. Text Search Filter
+    if (searchTerm.trim()) {
+      const q = searchTerm.toLowerCase();
+      const matchName = (company.name || '').toLowerCase().includes(q);
+      const matchArea = (company.area || '').toLowerCase().includes(q);
+      const matchCat = (company.category || '').toLowerCase().includes(q);
+      const matchAddr = (company.address || '').toLowerCase().includes(q);
+      const matchDesc = (company.description || '').toLowerCase().includes(q);
+      if (!matchName && !matchArea && !matchCat && !matchAddr && !matchDesc) {
+        return false;
+      }
+    }
+
+    // 2. Job Type Filter
+    if (filterType !== 'All Types') {
+      const desc = (company.description || '').toLowerCase();
+      const cat = (company.category || '').toLowerCase();
+      const target = filterType.toLowerCase();
+      const hasMention = desc.includes(target) || cat.includes(target);
+      if (!hasMention && company.jobs === 0) return false;
+    }
+
+    // 3. Company Type Filter
+    if (filterCompanyType !== 'All') {
+      const cat = (company.category || '').toLowerCase();
+      const ec = (company.employeeCount || '').toLowerCase();
+      const desc = (company.description || '').toLowerCase();
+      const name = (company.name || '').toLowerCase();
+
+      if (filterCompanyType === 'Startup') {
+        const isStartup = cat.includes('startup') || ec.includes('1-10') || ec.includes('11-50') || desc.includes('startup');
+        if (!isStartup) return false;
+      } else if (filterCompanyType === 'MNC') {
+        const isMnc = cat.includes('mnc') || ec.includes('1,000+') || ec.includes('10,000+') || ec.includes('501-1,000') ||
+          name.includes('tech mahindra') || name.includes('tcs') || name.includes('infosys') || name.includes('wipro') || name.includes('cognizant');
+        if (!isMnc) return false;
+      } else if (filterCompanyType === 'Mid-Level') {
+        const isMid = ec.includes('51-200') || ec.includes('201-500');
+        if (!isMid) return false;
+      } else if (filterCompanyType === 'Product Based') {
+        const isProduct = cat.includes('software') || cat.includes('product') || desc.includes('product') || desc.includes('saas') || desc.includes('app') || desc.includes('platform');
+        if (!isProduct) return false;
+      } else if (filterCompanyType === 'Service Based') {
+        const isService = cat.includes('service') || cat.includes('consult') || desc.includes('service') || desc.includes('consult');
+        if (!isService) return false;
+      } else if (filterCompanyType === 'Agency') {
+        const isAgency = cat.includes('marketing') || cat.includes('advertis') || cat.includes('agency') || desc.includes('marketing') || desc.includes('advertising') || desc.includes('digital marketing');
+        if (!isAgency) return false;
+      }
+    }
+
+    // 4. Radius Filter (from central Bhubaneswar)
+    if (filterRadius !== 'All') {
+      const radiusKm = parseFloat(filterRadius);
+      const dist = calculateDistanceKm(BHUBANESWAR_CENTER.lat, BHUBANESWAR_CENTER.lng, company.lat, company.lng);
+      if (dist > radiusKm) return false;
+    }
+
+    // 5. Sector Filter
+    if (filterSector !== 'All Sectors') {
+      const cat = (company.category || '').toLowerCase();
+      const desc = (company.description || '').toLowerCase();
+      if (filterSector === 'IT / Software') {
+        if (!cat.includes('it') && !cat.includes('software') && !desc.includes('software') && !desc.includes('tech') && !desc.includes('it services')) return false;
+      } else if (filterSector === 'Marketing & Advertising') {
+        if (!cat.includes('market') && !cat.includes('advertis') && !desc.includes('market') && !desc.includes('advertis')) return false;
+      } else if (filterSector === 'Recruitment & HR') {
+        if (!cat.includes('recruit') && !cat.includes('human') && !cat.includes('hr') && !desc.includes('recruit')) return false;
+      } else if (filterSector === 'HealthTech') {
+        if (!cat.includes('health') && !desc.includes('health') && !desc.includes('medical') && !desc.includes('hospital')) return false;
+      } else if (filterSector === 'Semiconductor & Hardware') {
+        if (!cat.includes('semiconductor') && !cat.includes('electronic') && !desc.includes('hardware') && !desc.includes('semiconductor')) return false;
+      } else if (filterSector === 'Consulting') {
+        if (!cat.includes('consult') && !desc.includes('consult')) return false;
+      }
+    }
+
+    // 6. Hiring Now Filter
+    if (filterHiringNow) {
+      if (!company.isHiring && company.jobs === 0) return false;
+    }
+
+    // 7. More Options
+    if (moreFilters.remoteOnly) {
+      const desc = (company.description || '').toLowerCase();
+      if (!desc.includes('remote')) return false;
+    }
+    if (moreFilters.activelyHiring) {
+      if (!company.isHiring && company.jobs === 0) return false;
+    }
+    if (moreFilters.hasWebsite && !company.website) return false;
+
+    return true;
+  });
+
+  const allCompanies = filteredCompanies;
+  const topCompanies = filteredCompanies.slice(0, 10);
+
+  const totalCompanies = filteredCompanies.length;
+  const totalStartups = filteredCompanies.filter(c => {
     const cat = (c.category || '').toLowerCase();
     const ec = (c.employeeCount || '').toLowerCase();
     return cat.includes('startup') || ec.includes('1-10') || ec.includes('11-50');
   }).length;
 
-  const totalMidLevel = allCompanies.filter(c => {
+  const totalMidLevel = filteredCompanies.filter(c => {
     const ec = (c.employeeCount || '').toLowerCase();
     return ec.includes('51-200') || ec.includes('201-500');
   }).length;
 
-  const totalMNCs = allCompanies.filter(c => {
+  const totalMNCs = filteredCompanies.filter(c => {
     const cat = (c.category || '').toLowerCase();
     const ec = (c.employeeCount || '').toLowerCase();
-    return cat.includes('mnc') || ec.includes('1,001') || ec.includes('5,001') || ec.includes('10,000') || ec.includes('501-1000') || ec.includes('501-1,000');
+    return cat.includes('mnc') || ec.includes('1,000+') || ec.includes('10,000+') || ec.includes('501-1,000');
   }).length;
 
   // Convert companies to GeoJSON feature points for supercluster
-  const points = allCompanies.map(company => ({
+  const points = filteredCompanies.map(company => ({
     type: 'Feature',
     properties: { cluster: false, companyId: company.id, ...company },
     geometry: {
@@ -279,13 +455,6 @@ const Home = () => {
     zoom,
     options: { radius: 75, maxZoom: 15 } // At zoom 16+ it splits into individual markers
   });
-
-  // Search & Auto-Suggestions state (Bhubaneswar Grounded)
-  const [searchTerm, setSearchTerm] = useState('');
-  const [suggestions, setSuggestions] = useState([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
-  const searchContainerRef = useRef(null);
 
   // Fetch Bhubaneswar company suggestions as user types or focuses
   useEffect(() => {
@@ -446,7 +615,7 @@ const Home = () => {
     <div className="flex flex-col h-screen w-full bg-[#f8f9fa] font-sans overflow-hidden">
       
       {/* Top Navigation Bar */}
-      <header className="flex items-center justify-between px-3 sm:px-6 py-2 sm:py-3 bg-white border-b border-gray-100 shrink-0 gap-2">
+      <header className="relative z-50 flex items-center justify-between px-3 sm:px-6 py-2 sm:py-3 bg-white border-b border-gray-100 shrink-0 gap-2">
         {/* Logo */}
         <div className="flex items-center gap-2 shrink-0">
           <div className="w-8 h-8 sm:w-10 sm:h-10 bg-[#eef0ff] rounded-xl flex items-center justify-center">
@@ -496,7 +665,7 @@ const Home = () => {
 
           {/* Autocomplete Suggestion Dropdown */}
           {showSuggestions && (
-            <div className="absolute left-8 right-8 top-13 bg-white rounded-xl shadow-xl border border-gray-200 overflow-hidden z-50 animate-in fade-in-50 duration-150 max-h-[420px] overflow-y-auto">
+            <div className="absolute left-2 sm:left-8 right-2 sm:right-8 top-full mt-2 bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden z-[100] animate-in fade-in-50 duration-150 max-h-[420px] overflow-y-auto">
               <div className="px-4 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-100 flex items-center justify-between text-xs font-semibold text-blue-900">
                 <span className="flex items-center gap-1.5">
                   <MapPin className="w-3.5 h-3.5 text-blue-600" /> Companies in &amp; around Bhubaneswar
@@ -616,122 +785,264 @@ const Home = () => {
 
 
       {/* Secondary Filter Bar */}
-      <div className="flex items-center justify-between px-3 sm:px-6 py-2 sm:py-3 bg-white border-b border-gray-100 shrink-0 gap-3 overflow-x-auto no-scrollbar" ref={filterBarRef}>
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-          
-          {/* Sidebar Toggle */}
-          <button 
-            onClick={() => setShowSidebar(!showSidebar)} 
-            className="flex items-center justify-center p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-800 transition-colors mr-1 shrink-0"
-            title="Toggle Sidebar"
-          >
-            <Menu className="w-5 h-5" />
-          </button>
-
-          {/* All Types */}
-          <div className="relative shrink-0">
-            <button onClick={() => setActiveFilter(activeFilter === 'type' ? null : 'type')} className="flex items-center gap-2 bg-[#5b61f4] text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium whitespace-nowrap">
-              All Types <ChevronDown className={`w-3 h-3 sm:w-4 sm:h-4 opacity-80 transition-transform ${activeFilter === 'type' ? 'rotate-180' : ''}`} />
+      <div className="relative z-40 bg-white border-b border-gray-100 shrink-0 px-3 sm:px-6 py-2 sm:py-2.5" ref={filterBarRef}>
+        <div className="flex items-center justify-between gap-3 overflow-visible flex-wrap sm:flex-nowrap">
+          <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 flex-wrap sm:flex-nowrap">
+            
+            {/* Sidebar Toggle */}
+            <button 
+              onClick={() => setShowSidebar(!showSidebar)} 
+              className="flex items-center justify-center p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-800 transition-colors mr-1 shrink-0"
+              title="Toggle Sidebar"
+            >
+              <Menu className="w-5 h-5" />
             </button>
-            {activeFilter === 'type' && (
-              <div className="absolute top-full left-0 mt-2 w-48 bg-white border border-gray-100 rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.08)] z-50 py-1.5 animate-in fade-in zoom-in-95 duration-100">
-                {['Full Time', 'Part Time', 'Contract', 'Internship'].map(opt => (
-                  <div key={opt} onClick={() => setActiveFilter(null)} className="px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 cursor-pointer transition-colors">{opt}</div>
-                ))}
-              </div>
-            )}
-          </div>
 
-          {/* Company Type */}
-          <div className="relative shrink-0">
-            <button onClick={() => setActiveFilter(activeFilter === 'company' ? null : 'company')} className="flex items-center gap-2 border border-gray-200 text-gray-700 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium bg-white hover:bg-gray-50 whitespace-nowrap">
-              Company Type <ChevronDown className={`w-3 h-3 sm:w-4 sm:h-4 text-gray-400 transition-transform ${activeFilter === 'company' ? 'rotate-180' : ''}`} />
-            </button>
-            {activeFilter === 'company' && (
-              <div className="absolute top-full left-0 mt-2 w-48 bg-white border border-gray-100 rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.08)] z-50 py-1.5 animate-in fade-in zoom-in-95 duration-100">
-                {['MNC', 'Startup', 'Agency', 'Product Based', 'Service Based'].map(opt => (
-                  <div key={opt} onClick={() => setActiveFilter(null)} className="px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 cursor-pointer transition-colors">{opt}</div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Radius */}
-          <div className="relative shrink-0 hidden sm:block">
-            <button onClick={() => setActiveFilter(activeFilter === 'radius' ? null : 'radius')} className="flex items-center gap-2 border border-gray-200 text-gray-700 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium bg-white hover:bg-gray-50 whitespace-nowrap">
-              Radius (10km) <ChevronDown className={`w-3 h-3 sm:w-4 sm:h-4 text-gray-400 transition-transform ${activeFilter === 'radius' ? 'rotate-180' : ''}`} />
-            </button>
-            {activeFilter === 'radius' && (
-              <div className="absolute top-full left-0 mt-2 w-40 bg-white border border-gray-100 rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.08)] z-50 py-1.5 animate-in fade-in zoom-in-95 duration-100">
-                {['5 km', '10 km', '20 km', '50 km', 'Anywhere'].map(opt => (
-                  <div key={opt} onClick={() => setActiveFilter(null)} className="px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 cursor-pointer transition-colors">{opt}</div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* All Sectors */}
-          <div className="relative shrink-0 hidden md:block">
-            <button onClick={() => setActiveFilter(activeFilter === 'sector' ? null : 'sector')} className="flex items-center gap-2 border border-gray-200 text-gray-700 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium bg-white hover:bg-gray-50 whitespace-nowrap">
-              All Sectors <ChevronDown className={`w-3 h-3 sm:w-4 sm:h-4 text-gray-400 transition-transform ${activeFilter === 'sector' ? 'rotate-180' : ''}`} />
-            </button>
-            {activeFilter === 'sector' && (
-              <div className="absolute top-full left-0 mt-2 w-48 bg-white border border-gray-100 rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.08)] z-50 py-1.5 animate-in fade-in zoom-in-95 duration-100">
-                {['IT / Software', 'HealthTech', 'FinTech', 'EdTech', 'E-commerce'].map(opt => (
-                  <div key={opt} onClick={() => setActiveFilter(null)} className="px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 cursor-pointer transition-colors">{opt}</div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* More Options */}
-          <div className="relative shrink-0 hidden lg:block">
-            <button onClick={() => setActiveFilter(activeFilter === 'more' ? null : 'more')} className="flex items-center gap-2 border border-gray-200 text-gray-700 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium bg-white hover:bg-gray-50 whitespace-nowrap">
-              More Options <ChevronDown className={`w-3 h-3 sm:w-4 sm:h-4 text-gray-400 transition-transform ${activeFilter === 'more' ? 'rotate-180' : ''}`} />
-            </button>
-            {activeFilter === 'more' && (
-              <div className="absolute top-full left-0 mt-2 w-56 bg-white border border-gray-100 rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.08)] z-50 p-3 animate-in fade-in zoom-in-95 duration-100">
-                <div className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wider">Additional Filters</div>
-                <label className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer">
-                  <input type="checkbox" className="rounded text-blue-600 focus:ring-blue-500" />
-                  <span className="text-sm text-gray-700">Remote Only</span>
-                </label>
-                <label className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer">
-                  <input type="checkbox" className="rounded text-blue-600 focus:ring-blue-500" />
-                  <span className="text-sm text-gray-700">Actively Hiring</span>
-                </label>
-                <label className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer">
-                  <input type="checkbox" className="rounded text-blue-600 focus:ring-blue-500" />
-                  <span className="text-sm text-gray-700">With Salary Details</span>
-                </label>
-              </div>
-            )}
-          </div>
-          
-          <div className="h-6 sm:h-8 w-px bg-gray-200 mx-1 hidden sm:block"></div>
-          
-          <div className="flex items-center gap-1.5 sm:gap-2 px-1 sm:px-3 shrink-0">
-            <div className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-[#f0f2ff] flex items-center justify-center">
-              <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-[#5b61f4]"></div>
+            {/* All Types (Job Type) */}
+            <div className="relative shrink-0">
+              <button 
+                onClick={() => setActiveFilter(activeFilter === 'type' ? null : 'type')} 
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all border whitespace-nowrap cursor-pointer ${
+                  filterType !== 'All Types'
+                    ? 'bg-[#5b61f4] text-white border-[#5b61f4] shadow-xs font-semibold'
+                    : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                }`}
+              >
+                <span>{filterType}</span>
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${activeFilter === 'type' ? 'rotate-180' : ''}`} />
+              </button>
+              {activeFilter === 'type' && (
+                <div className="absolute top-full left-0 mt-2 w-48 bg-white border border-gray-200 rounded-xl shadow-2xl z-[70] py-1.5 animate-in fade-in zoom-in-95 duration-100">
+                  {['All Types', 'Full Time', 'Part Time', 'Contract', 'Internship'].map(opt => (
+                    <div 
+                      key={opt} 
+                      onClick={() => { setFilterType(opt); setActiveFilter(null); }} 
+                      className={`px-4 py-2 text-xs sm:text-sm cursor-pointer transition-colors flex items-center justify-between ${
+                        filterType === opt ? 'bg-blue-50 text-[#5b61f4] font-semibold' : 'text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      <span>{opt}</span>
+                      {filterType === opt && <Check className="w-3.5 h-3.5 text-[#5b61f4]" />}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-            <span className="text-xs sm:text-sm font-medium text-gray-700 whitespace-nowrap">Hiring Now</span>
-            <div className="w-7 h-3.5 sm:w-8 sm:h-4 bg-gray-200 rounded-full ml-1 relative">
-              <div className="w-3 h-3 sm:w-3.5 sm:h-3.5 bg-white rounded-full absolute left-0.5 top-0.5 shadow-sm"></div>
-            </div>
-          </div>
-          
-          <button className="hidden md:block text-xs sm:text-sm font-medium text-gray-500 border border-gray-200 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg hover:bg-gray-50 ml-1 sm:ml-2 whitespace-nowrap shrink-0">
-            Clear Filters
-          </button>
-        </div>
 
-        <div className="flex items-center gap-1 sm:gap-2 border border-gray-200 rounded-lg p-1 bg-gray-50 shrink-0 ml-auto">
-          <button className="flex items-center gap-1.5 sm:gap-2 bg-white text-[#5b61f4] px-2 sm:px-4 py-1 sm:py-1.5 rounded-md text-xs sm:text-sm font-medium shadow-sm whitespace-nowrap">
-            <MapIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> Map View
-          </button>
-          <button className="flex items-center gap-1.5 sm:gap-2 text-gray-600 px-2 sm:px-4 py-1 sm:py-1.5 rounded-md text-xs sm:text-sm font-medium hover:text-gray-900 whitespace-nowrap">
-            <List className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> List View
-          </button>
+            {/* Company Type */}
+            <div className="relative shrink-0">
+              <button 
+                onClick={() => setActiveFilter(activeFilter === 'company' ? null : 'company')} 
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all border whitespace-nowrap cursor-pointer ${
+                  filterCompanyType !== 'All'
+                    ? 'bg-blue-50 text-[#5b61f4] border-blue-300 font-semibold shadow-xs'
+                    : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                }`}
+              >
+                <span>{filterCompanyType === 'All' ? 'Company Type' : filterCompanyType}</span>
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${activeFilter === 'company' ? 'rotate-180' : ''}`} />
+              </button>
+              {activeFilter === 'company' && (
+                <div className="absolute top-full left-0 mt-2 w-52 bg-white border border-gray-200 rounded-xl shadow-2xl z-[70] py-1.5 animate-in fade-in zoom-in-95 duration-100">
+                  {[
+                    { label: 'All Company Types', val: 'All' },
+                    { label: 'MNC / Enterprise', val: 'MNC' },
+                    { label: 'Startup (1-50)', val: 'Startup' },
+                    { label: 'Mid-Level (51-500)', val: 'Mid-Level' },
+                    { label: 'Product Based', val: 'Product Based' },
+                    { label: 'Service Based', val: 'Service Based' },
+                    { label: 'Marketing Agency', val: 'Agency' },
+                  ].map(opt => (
+                    <div 
+                      key={opt.val} 
+                      onClick={() => { setFilterCompanyType(opt.val); setActiveFilter(null); }} 
+                      className={`px-4 py-2 text-xs sm:text-sm cursor-pointer transition-colors flex items-center justify-between ${
+                        filterCompanyType === opt.val ? 'bg-blue-50 text-[#5b61f4] font-semibold' : 'text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      <span>{opt.label}</span>
+                      {filterCompanyType === opt.val && <Check className="w-3.5 h-3.5 text-[#5b61f4]" />}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Radius */}
+            <div className="relative shrink-0 hidden sm:block">
+              <button 
+                onClick={() => setActiveFilter(activeFilter === 'radius' ? null : 'radius')} 
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all border whitespace-nowrap cursor-pointer ${
+                  filterRadius !== 'All'
+                    ? 'bg-blue-50 text-[#5b61f4] border-blue-300 font-semibold shadow-xs'
+                    : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                }`}
+              >
+                <span>{filterRadius === 'All' ? 'Radius' : `${filterRadius} km`}</span>
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${activeFilter === 'radius' ? 'rotate-180' : ''}`} />
+              </button>
+              {activeFilter === 'radius' && (
+                <div className="absolute top-full left-0 mt-2 w-48 bg-white border border-gray-200 rounded-xl shadow-2xl z-[70] py-1.5 animate-in fade-in zoom-in-95 duration-100">
+                  {[
+                    { label: 'Anywhere (All BBSR)', val: 'All' },
+                    { label: 'Within 5 km', val: '5' },
+                    { label: 'Within 10 km', val: '10' },
+                    { label: 'Within 20 km', val: '20' },
+                    { label: 'Within 50 km', val: '50' },
+                  ].map(opt => (
+                    <div 
+                      key={opt.val} 
+                      onClick={() => handleRadiusChange(opt.val)} 
+                      className={`px-4 py-2 text-xs sm:text-sm cursor-pointer transition-colors flex items-center justify-between ${
+                        filterRadius === opt.val ? 'bg-blue-50 text-[#5b61f4] font-semibold' : 'text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      <span>{opt.label}</span>
+                      {filterRadius === opt.val && <Check className="w-3.5 h-3.5 text-[#5b61f4]" />}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* All Sectors */}
+            <div className="relative shrink-0 hidden md:block">
+              <button 
+                onClick={() => setActiveFilter(activeFilter === 'sector' ? null : 'sector')} 
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all border whitespace-nowrap cursor-pointer ${
+                  filterSector !== 'All Sectors'
+                    ? 'bg-blue-50 text-[#5b61f4] border-blue-300 font-semibold shadow-xs'
+                    : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                }`}
+              >
+                <span>{filterSector}</span>
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${activeFilter === 'sector' ? 'rotate-180' : ''}`} />
+              </button>
+              {activeFilter === 'sector' && (
+                <div className="absolute top-full left-0 mt-2 w-56 bg-white border border-gray-200 rounded-xl shadow-2xl z-[70] py-1.5 animate-in fade-in zoom-in-95 duration-100">
+                  {[
+                    'All Sectors',
+                    'IT / Software',
+                    'Marketing & Advertising',
+                    'Recruitment & HR',
+                    'HealthTech',
+                    'Semiconductor & Hardware',
+                    'Consulting'
+                  ].map(opt => (
+                    <div 
+                      key={opt} 
+                      onClick={() => { setFilterSector(opt); setActiveFilter(null); }} 
+                      className={`px-4 py-2 text-xs sm:text-sm cursor-pointer transition-colors flex items-center justify-between ${
+                        filterSector === opt ? 'bg-blue-50 text-[#5b61f4] font-semibold' : 'text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      <span>{opt}</span>
+                      {filterSector === opt && <Check className="w-3.5 h-3.5 text-[#5b61f4]" />}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* More Options */}
+            <div className="relative shrink-0 hidden lg:block">
+              <button 
+                onClick={() => setActiveFilter(activeFilter === 'more' ? null : 'more')} 
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all border whitespace-nowrap cursor-pointer ${
+                  (moreFilters.remoteOnly || moreFilters.activelyHiring || moreFilters.withSalary || moreFilters.hasWebsite)
+                    ? 'bg-blue-50 text-[#5b61f4] border-blue-300 font-semibold shadow-xs'
+                    : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                }`}
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5" />
+                <span>More Options</span>
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${activeFilter === 'more' ? 'rotate-180' : ''}`} />
+              </button>
+              {activeFilter === 'more' && (
+                <div className="absolute top-full left-0 mt-2 w-56 bg-white border border-gray-200 rounded-xl shadow-2xl z-[70] p-3 animate-in fade-in zoom-in-95 duration-100">
+                  <div className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wider">Additional Filters</div>
+                  <label className="flex items-center gap-2 p-1.5 hover:bg-gray-50 rounded cursor-pointer select-none">
+                    <input 
+                      type="checkbox" 
+                      checked={moreFilters.remoteOnly}
+                      onChange={(e) => setMoreFilters(prev => ({ ...prev, remoteOnly: e.target.checked }))}
+                      className="rounded text-blue-600 focus:ring-blue-500" 
+                    />
+                    <span className="text-xs sm:text-sm text-gray-700">Remote Only</span>
+                  </label>
+                  <label className="flex items-center gap-2 p-1.5 hover:bg-gray-50 rounded cursor-pointer select-none">
+                    <input 
+                      type="checkbox" 
+                      checked={moreFilters.activelyHiring}
+                      onChange={(e) => setMoreFilters(prev => ({ ...prev, activelyHiring: e.target.checked }))}
+                      className="rounded text-blue-600 focus:ring-blue-500" 
+                    />
+                    <span className="text-xs sm:text-sm text-gray-700">Actively Hiring</span>
+                  </label>
+                  <label className="flex items-center gap-2 p-1.5 hover:bg-gray-50 rounded cursor-pointer select-none">
+                    <input 
+                      type="checkbox" 
+                      checked={moreFilters.hasWebsite}
+                      onChange={(e) => setMoreFilters(prev => ({ ...prev, hasWebsite: e.target.checked }))}
+                      className="rounded text-blue-600 focus:ring-blue-500" 
+                    />
+                    <span className="text-xs sm:text-sm text-gray-700">Has Official Website</span>
+                  </label>
+                </div>
+              )}
+            </div>
+            
+            <div className="h-6 sm:h-7 w-px bg-gray-200 mx-0.5 hidden sm:block"></div>
+            
+            {/* Hiring Now Toggle */}
+            <button 
+              onClick={() => setFilterHiringNow(!filterHiringNow)}
+              className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-lg border transition-all cursor-pointer whitespace-nowrap ${
+                filterHiringNow 
+                  ? 'bg-emerald-50 border-emerald-300 text-emerald-700 font-semibold shadow-xs' 
+                  : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
+              }`}
+              title="Filter companies currently hiring"
+            >
+              <div className={`w-2 h-2 rounded-full ${filterHiringNow ? 'bg-emerald-600 animate-pulse' : 'bg-[#5b61f4]'}`}></div>
+              <span className="text-xs sm:text-sm">Hiring Now</span>
+              <div className={`w-7 h-4 rounded-full transition-colors relative flex items-center px-0.5 ${filterHiringNow ? 'bg-emerald-600' : 'bg-gray-200'}`}>
+                <div className={`w-3 h-3 bg-white rounded-full transition-transform ${filterHiringNow ? 'translate-x-3' : 'translate-x-0'}`}></div>
+              </div>
+            </button>
+            
+            {/* Clear Filters Button */}
+            {activeFilterCount > 0 && (
+              <button 
+                onClick={clearAllFilters}
+                className="flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-rose-600 hover:text-rose-700 bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-lg hover:bg-rose-100 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                title="Reset all filters"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Reset ({activeFilterCount})</span>
+              </button>
+            )}
+          </div>
+
+          {/* View Mode Toggle: Map View vs List View */}
+          <div className="flex items-center gap-1 border border-gray-200 rounded-lg p-1 bg-gray-50 shrink-0 ml-auto">
+            <button 
+              onClick={() => setViewMode('map')}
+              className={`flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1 rounded-md text-xs sm:text-sm font-medium transition-all cursor-pointer ${
+                viewMode === 'map' ? 'bg-white text-[#5b61f4] shadow-sm font-bold' : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <MapIcon className="w-3.5 h-3.5" /> Map View
+            </button>
+            <button 
+              onClick={() => setViewMode('list')}
+              className={`flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1 rounded-md text-xs sm:text-sm font-medium transition-all cursor-pointer ${
+                viewMode === 'list' ? 'bg-white text-[#5b61f4] shadow-sm font-bold' : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <List className="w-3.5 h-3.5" /> List View ({filteredCompanies.length})
+            </button>
+          </div>
         </div>
       </div>
 
@@ -815,37 +1126,74 @@ const Home = () => {
           </button>
         </div>
 
-        {/* Map Area */}
-        <div className="flex-1 relative bg-blue-50">
-          <MapContainer 
-            center={[20.2961, 85.8245]} 
-            zoom={12} 
-            className="h-full w-full z-0"
-            zoomControl={false}
-            ref={mapRef}
-          >
-            <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-              url="https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?key=cb1_3t4j_1_5b91505d13706a020613c5ec"
-            />
-            
-            <MapEvents setBounds={setBounds} setZoom={setZoom} />
+        {/* Main View Area: Map View vs List View */}
+        {viewMode === 'map' ? (
+          <div className="flex-1 relative bg-blue-50">
+            {/* Empty state notice over map if 0 results match */}
+            {filteredCompanies.length === 0 && (
+              <div className="absolute top-6 left-1/2 -translate-x-1/2 z-[400] bg-white/95 backdrop-blur-sm border border-gray-200 px-6 py-4 rounded-2xl shadow-xl flex flex-col items-center gap-2 max-w-sm text-center">
+                <Building2 className="w-8 h-8 text-gray-400" />
+                <h4 className="font-bold text-gray-800 text-sm">No companies match active filters</h4>
+                <p className="text-xs text-gray-500">Try broadening your search or resetting active filters.</p>
+                <button 
+                  onClick={clearAllFilters} 
+                  className="mt-1 px-4 py-1.5 bg-[#5b61f4] text-white text-xs font-semibold rounded-lg hover:bg-blue-600 transition-colors cursor-pointer"
+                >
+                  Reset All Filters
+                </button>
+              </div>
+            )}
 
-            {/* Render dynamic clusters and markers */}
-            {clusters.map(cluster => {
-              const [longitude, latitude] = cluster.geometry.coordinates;
-              const { cluster: isCluster, point_count: pointCount } = cluster.properties;
+            <MapContainer 
+              center={[20.2961, 85.8245]} 
+              zoom={12} 
+              className="h-full w-full z-0"
+              zoomControl={false}
+              ref={mapRef}
+            >
+              <TileLayer
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+                url="https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?key=cb1_3t4j_1_5b91505d13706a020613c5ec"
+              />
+              
+              <MapEvents setBounds={setBounds} setZoom={setZoom} />
 
-              if (isCluster) {
-                // For small clusters (2–6): use stacked logo group with hover-spread
-                if (pointCount <= 6) {
-                  const leaves = supercluster.getLeaves(cluster.id, 6);
-                  const companyProps = leaves.map(l => l.properties);
+              {/* Render dynamic clusters and markers */}
+              {clusters.map(cluster => {
+                const [longitude, latitude] = cluster.geometry.coordinates;
+                const { cluster: isCluster, point_count: pointCount } = cluster.properties;
+
+                if (isCluster) {
+                  // For small clusters (2–6): use stacked logo group with hover-spread
+                  if (pointCount <= 6) {
+                    const leaves = supercluster.getLeaves(cluster.id, 6);
+                    const companyProps = leaves.map(l => l.properties);
+                    return (
+                      <Marker
+                        key={`cluster-${cluster.id}`}
+                        position={[latitude, longitude]}
+                        icon={createGroupIcon(companyProps)}
+                        eventHandlers={{
+                          click: () => {
+                            const expansionZoom = Math.min(supercluster.getClusterExpansionZoom(cluster.id), 18);
+                            mapRef.current.setView([latitude, longitude], expansionZoom, { animate: true });
+                          }
+                        }}
+                      />
+                    );
+                  }
+
+                  // For large clusters: use the coloured bubble
+                  let colorClass = 'green';
+                  if (pointCount > 200) colorClass = 'red';
+                  else if (pointCount > 50) colorClass = 'orange';
+                  else if (pointCount > 10) colorClass = 'yellow';
+
                   return (
                     <Marker
                       key={`cluster-${cluster.id}`}
                       position={[latitude, longitude]}
-                      icon={createGroupIcon(companyProps)}
+                      icon={createClusterIcon(pointCount, colorClass)}
                       eventHandlers={{
                         click: () => {
                           const expansionZoom = Math.min(supercluster.getClusterExpansionZoom(cluster.id), 18);
@@ -856,225 +1204,314 @@ const Home = () => {
                   );
                 }
 
-                // For large clusters: use the coloured bubble
-                let colorClass = 'green';
-                if (pointCount > 200) colorClass = 'red';
-                else if (pointCount > 50) colorClass = 'orange';
-                else if (pointCount > 10) colorClass = 'yellow';
-
                 return (
                   <Marker
-                    key={`cluster-${cluster.id}`}
+                    key={`company-${cluster.properties.companyId}`}
                     position={[latitude, longitude]}
-                    icon={createClusterIcon(pointCount, colorClass)}
+                    icon={createCompanyIcon(cluster.properties)}
                     eventHandlers={{
                       click: () => {
-                        const expansionZoom = Math.min(supercluster.getClusterExpansionZoom(cluster.id), 18);
-                        mapRef.current.setView([latitude, longitude], expansionZoom, { animate: true });
+                        handleCompanyClick(cluster.properties);
+                        mapRef.current.setView([latitude, longitude], 15, { animate: true });
                       }
                     }}
                   />
                 );
-              }
+              })}
+            </MapContainer>
 
-              return (
-                <Marker
-                  key={`company-${cluster.properties.companyId}`}
-                  position={[latitude, longitude]}
-                  icon={createCompanyIcon(cluster.properties)}
-                  eventHandlers={{
-                    click: () => {
-                      handleCompanyClick(cluster.properties);
-                      mapRef.current.setView([latitude, longitude], 15, { animate: true });
-                    }
-                  }}
-                />
-              );
-            })}
-          </MapContainer>
-
-          {/* Map Controls */}
-          <div className="absolute top-6 left-6 z-10 flex flex-col gap-2">
-            <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden flex flex-col">
-              <button 
-                onClick={() => mapRef.current?.zoomIn()}
-                className="p-2 hover:bg-gray-50 active:bg-gray-100 border-b border-gray-100 text-gray-700"
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
-              </button>
-              <button 
-                onClick={() => mapRef.current?.zoomOut()}
-                className="p-2 hover:bg-gray-50 active:bg-gray-100 text-gray-700"
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14"/></svg>
-              </button>
-            </div>
-            <button 
-              onClick={() => mapRef.current?.setView([20.2961, 85.8245], 12, { animate: true })}
-              className="bg-white rounded-lg shadow-sm border border-gray-100 p-2 text-gray-700 hover:bg-gray-50 active:bg-gray-100"
-            >
-              <Navigation className="w-5 h-5" />
-            </button>
-          </div>
-
-          {/* Map Legend */}
-          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 bg-white px-3 sm:px-5 py-2 sm:py-2.5 rounded-full shadow-lg border border-gray-100 flex items-center gap-3 sm:gap-6 w-[90%] sm:w-auto overflow-x-auto no-scrollbar">
-            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-              <div className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-[#8de098] border-2 border-[#dcf4e0]"></div>
-              <span className="text-[10px] sm:text-xs font-semibold text-gray-800">1-10</span>
-            </div>
-            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-              <div className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-[#ffda6c] border-2 border-[#fff2cc]"></div>
-              <span className="text-[10px] sm:text-xs font-semibold text-gray-800">11-50</span>
-            </div>
-            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-              <div className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-[#ffb076] border-2 border-[#ffe4d0]"></div>
-              <span className="text-[10px] sm:text-xs font-semibold text-gray-800">51-200</span>
-            </div>
-            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-              <div className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-[#ff7b88] border-2 border-[#ffdde0]"></div>
-              <span className="text-[10px] sm:text-xs font-semibold text-gray-800">201+</span>
-            </div>
-          </div>
-
-          {/* Floating Right Card */}
-          {showRightCard && selectedCompany && (
-            <div className="absolute top-auto bottom-0 sm:top-6 right-0 sm:right-6 w-full sm:w-[360px] bg-white rounded-t-2xl sm:rounded-2xl shadow-xl border-t sm:border border-gray-100 z-[1000] flex flex-col overflow-hidden max-h-[70vh] sm:max-h-[calc(100%-48px)] transition-transform animate-in slide-in-from-bottom-full sm:slide-in-from-right-8">
-              
-              {/* Card Header with logo + close */}
-              <div className="flex items-center justify-between px-4 sm:px-5 py-3 sm:py-4 border-b border-gray-100 shrink-0">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-white border border-gray-100 shadow-sm flex items-center justify-center overflow-hidden shrink-0">
-                    {selectedCompany.logo && typeof selectedCompany.logo === 'string' && selectedCompany.logo.startsWith('http') ? (
-                      <img src={selectedCompany.logo} alt="logo" className="w-full h-full object-contain p-1" />
-                    ) : (
-                      <span className="text-lg sm:text-xl font-bold text-[#5b61f4]">{selectedCompany.logo || selectedCompany.name?.charAt(0) || ''}</span>
-                    )}
-                  </div>
-                  <div>
-                    <h2 className="text-sm sm:text-base font-bold text-gray-900 flex items-center gap-1.5 leading-tight">
-                      {selectedCompany.name}
-                      <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-500 fill-blue-50 shrink-0" />
-                    </h2>
-                    <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5">{selectedCompany.category}</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setShowRightCard(false)}
-                  className="p-1.5 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors shrink-0"
+            {/* Map Controls */}
+            <div className="absolute top-6 left-6 z-10 flex flex-col gap-2">
+              <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden flex flex-col">
+                <button 
+                  onClick={() => mapRef.current?.zoomIn()}
+                  className="p-2 hover:bg-gray-50 active:bg-gray-100 border-b border-gray-100 text-gray-700 cursor-pointer"
+                  title="Zoom In"
                 >
-                  <X className="w-4 h-4 sm:w-4 sm:h-4" />
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
+                </button>
+                <button 
+                  onClick={() => mapRef.current?.zoomOut()}
+                  className="p-2 hover:bg-gray-50 active:bg-gray-100 text-gray-700 cursor-pointer"
+                  title="Zoom Out"
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14"/></svg>
                 </button>
               </div>
+              <button 
+                onClick={() => mapRef.current?.setView([20.2961, 85.8245], 12, { animate: true })}
+                className="bg-white rounded-lg shadow-sm border border-gray-100 p-2 text-gray-700 hover:bg-gray-50 active:bg-gray-100 cursor-pointer"
+                title="Reset to Central Bhubaneswar"
+              >
+                <Navigation className="w-5 h-5" />
+              </button>
+            </div>
 
-              {/* Card Body */}
-              <div className="px-5 py-4 flex-1 overflow-y-auto flex flex-col gap-3">
+            {/* Map Legend */}
+            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 bg-white px-3 sm:px-5 py-2 sm:py-2.5 rounded-full shadow-lg border border-gray-100 flex items-center gap-3 sm:gap-6 w-[90%] sm:w-auto overflow-x-auto no-scrollbar">
+              <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                <div className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-[#8de098] border-2 border-[#dcf4e0]"></div>
+                <span className="text-[10px] sm:text-xs font-semibold text-gray-800">1-10</span>
+              </div>
+              <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                <div className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-[#ffda6c] border-2 border-[#fff2cc]"></div>
+                <span className="text-[10px] sm:text-xs font-semibold text-gray-800">11-50</span>
+              </div>
+              <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                <div className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-[#ffb076] border-2 border-[#ffe4d0]"></div>
+                <span className="text-[10px] sm:text-xs font-semibold text-gray-800">51-200</span>
+              </div>
+              <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                <div className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-[#ff7b88] border-2 border-[#ffdde0]"></div>
+                <span className="text-[10px] sm:text-xs font-semibold text-gray-800">201+</span>
+              </div>
+            </div>
+
+            {/* Floating Right Card */}
+            {showRightCard && selectedCompany && (
+              <div className="absolute top-auto bottom-0 sm:top-6 right-0 sm:right-6 w-full sm:w-[360px] bg-white rounded-t-2xl sm:rounded-2xl shadow-xl border-t sm:border border-gray-100 z-[1000] flex flex-col overflow-hidden max-h-[70vh] sm:max-h-[calc(100%-48px)] transition-transform animate-in slide-in-from-bottom-full sm:slide-in-from-right-8">
                 
-                {/* Location */}
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-start gap-2 flex-1">
-                    <MapPin className="w-4 h-4 text-gray-400 shrink-0 mt-0.5" />
-                    <span className="text-xs text-gray-700 leading-snug">
-                      {selectedCompany.address || selectedCompany.location || 'Bhubaneswar, Odisha'}
-                    </span>
+                {/* Card Header with logo + close */}
+                <div className="flex items-center justify-between px-4 sm:px-5 py-3 sm:py-4 border-b border-gray-100 shrink-0">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-white border border-gray-100 shadow-sm flex items-center justify-center overflow-hidden shrink-0">
+                      {selectedCompany.logo && typeof selectedCompany.logo === 'string' && selectedCompany.logo.startsWith('http') ? (
+                        <img src={selectedCompany.logo} alt="logo" className="w-full h-full object-contain p-1" />
+                      ) : (
+                        <span className="text-lg sm:text-xl font-bold text-[#5b61f4]">{selectedCompany.logo || selectedCompany.name?.charAt(0) || ''}</span>
+                      )}
+                    </div>
+                    <div>
+                      <h2 className="text-sm sm:text-base font-bold text-gray-900 flex items-center gap-1.5 leading-tight">
+                        {selectedCompany.name}
+                        <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-500 fill-blue-50 shrink-0" />
+                      </h2>
+                      <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5">{selectedCompany.category}</p>
+                    </div>
                   </div>
-                  <a
-                    href={selectedCompany.googleMapUrl || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(selectedCompany.name + ', ' + (selectedCompany.address || selectedCompany.location))}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-[11px] text-blue-600 hover:text-blue-800 font-semibold shrink-0 hover:underline flex items-center gap-0.5"
+                  <button
+                    onClick={() => setShowRightCard(false)}
+                    className="p-1.5 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors shrink-0 cursor-pointer"
                   >
-                    <ExternalLink className="w-3 h-3" /> Map
-                  </a>
-                </div>
-
-                {/* Phone */}
-                {selectedCompany.phone && (
-                  <div className="flex items-center gap-2">
-                    <Phone className="w-4 h-4 text-gray-400 shrink-0" />
-                    <a href={`tel:${selectedCompany.phone}`} className="text-xs text-gray-800 font-medium hover:text-[#5b61f4]">
-                      {selectedCompany.phone}
-                    </a>
-                  </div>
-                )}
-
-                {/* Email */}
-                {selectedCompany.email && (
-                  <div className="flex items-center gap-2">
-                    <Mail className="w-4 h-4 text-gray-400 shrink-0" />
-                    <a href={`mailto:${selectedCompany.email}`} className="text-xs text-gray-800 font-medium hover:text-[#5b61f4] truncate">
-                      {selectedCompany.email}
-                    </a>
-                  </div>
-                )}
-
-                {/* Website */}
-                {selectedCompany.website && (
-                  <div className="flex items-center gap-2">
-                    <Globe className="w-4 h-4 text-gray-400 shrink-0" />
-                    <a href={selectedCompany.website} target="_blank" rel="noopener noreferrer" className="text-xs text-[#5b61f4] font-medium hover:underline truncate">
-                      {selectedCompany.website}
-                    </a>
-                  </div>
-                )}
-
-                {/* Founded + Team */}
-                <div className="flex items-center gap-6 pt-1 text-xs border-t border-gray-100">
-                  {selectedCompany.foundedYear && (
-                    <div>
-                      <span className="text-gray-500">Founded: </span>
-                      <span className="text-gray-900 font-bold">{selectedCompany.foundedYear}</span>
-                    </div>
-                  )}
-                  {selectedCompany.employeeCount && (
-                    <div>
-                      <span className="text-gray-500">Team Size: </span>
-                      <span className="text-gray-900 font-bold">{selectedCompany.employeeCount}</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Description */}
-                {selectedCompany.description && (
-                  <p className="text-xs text-gray-600 leading-relaxed bg-gray-50 p-3 rounded-xl border border-gray-100">
-                    {selectedCompany.description}
-                  </p>
-                )}
-
-                {/* Open Jobs */}
-                {selectedCompany.jobs > 0 && (
-                  <div className="bg-[#f8f9fa] border border-gray-100 rounded-xl p-3 flex items-center justify-between">
-                    <div className="flex items-center gap-2 font-semibold text-gray-900 text-sm">
-                      <Briefcase className="w-4 h-4 text-gray-700" />
-                      {selectedCompany.jobs} Open Jobs
-                    </div>
-                    <button className="text-[#5b61f4] bg-white border border-blue-100 font-medium text-xs px-3 py-1.5 rounded-lg hover:bg-blue-50 transition-colors">
-                      View Jobs
-                    </button>
-                  </div>
-                )}
-
-                {/* Action Buttons */}
-                <div className="grid grid-cols-2 gap-2 pt-1">
-                  {selectedCompany.website ? (
-                    <a href={selectedCompany.website} target="_blank" rel="noopener noreferrer"
-                      className="flex items-center justify-center gap-1.5 text-xs font-bold text-[#5b61f4] border border-blue-200 bg-blue-50 rounded-lg py-2.5 hover:bg-blue-100 transition-colors">
-                      <Globe className="w-3.5 h-3.5" /> Website ↗
-                    </a>
-                  ) : (
-                    <button className="flex items-center justify-center gap-1.5 text-xs font-bold text-gray-400 border border-gray-200 rounded-lg py-2.5 cursor-not-allowed">
-                      <Globe className="w-3.5 h-3.5" /> No Website
-                    </button>
-                  )}
-                  <button className="bg-[#5b61f4] text-white text-xs font-medium rounded-lg py-2.5 hover:bg-blue-700 transition-colors">
-                    View Profile
+                    <X className="w-4 h-4 sm:w-4 sm:h-4" />
                   </button>
                 </div>
 
+                {/* Card Body */}
+                <div className="px-5 py-4 flex-1 overflow-y-auto flex flex-col gap-3">
+                  
+                  {/* Location */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-start gap-2 flex-1">
+                      <MapPin className="w-4 h-4 text-gray-400 shrink-0 mt-0.5" />
+                      <span className="text-xs text-gray-700 leading-snug">
+                        {selectedCompany.address || selectedCompany.location || 'Bhubaneswar, Odisha'}
+                      </span>
+                    </div>
+                    <a
+                      href={selectedCompany.googleMapUrl || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(selectedCompany.name + ', ' + (selectedCompany.address || selectedCompany.location))}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[11px] text-blue-600 hover:text-blue-800 font-semibold shrink-0 hover:underline flex items-center gap-0.5"
+                    >
+                      <ExternalLink className="w-3 h-3" /> Map
+                    </a>
+                  </div>
+
+                  {/* Phone */}
+                  {selectedCompany.phone && (
+                    <div className="flex items-center gap-2">
+                      <Phone className="w-4 h-4 text-gray-400 shrink-0" />
+                      <a href={`tel:${selectedCompany.phone}`} className="text-xs text-gray-800 font-medium hover:text-[#5b61f4]">
+                        {selectedCompany.phone}
+                      </a>
+                    </div>
+                  )}
+
+                  {/* Email */}
+                  {selectedCompany.email && (
+                    <div className="flex items-center gap-2">
+                      <Mail className="w-4 h-4 text-gray-400 shrink-0" />
+                      <a href={`mailto:${selectedCompany.email}`} className="text-xs text-gray-800 font-medium hover:text-[#5b61f4] truncate">
+                        {selectedCompany.email}
+                      </a>
+                    </div>
+                  )}
+
+                  {/* Website */}
+                  {selectedCompany.website && (
+                    <div className="flex items-center gap-2">
+                      <Globe className="w-4 h-4 text-gray-400 shrink-0" />
+                      <a href={selectedCompany.website} target="_blank" rel="noopener noreferrer" className="text-xs text-[#5b61f4] font-medium hover:underline truncate">
+                        {selectedCompany.website}
+                      </a>
+                    </div>
+                  )}
+
+                  {/* Founded + Team */}
+                  <div className="flex items-center gap-6 pt-1 text-xs border-t border-gray-100">
+                    {selectedCompany.foundedYear && (
+                      <div>
+                        <span className="text-gray-500">Founded: </span>
+                        <span className="text-gray-900 font-bold">{selectedCompany.foundedYear}</span>
+                      </div>
+                    )}
+                    {selectedCompany.employeeCount && (
+                      <div>
+                        <span className="text-gray-500">Team Size: </span>
+                        <span className="text-gray-900 font-bold">{selectedCompany.employeeCount}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Description */}
+                  {selectedCompany.description && (
+                    <p className="text-xs text-gray-600 leading-relaxed bg-gray-50 p-3 rounded-xl border border-gray-100">
+                      {selectedCompany.description}
+                    </p>
+                  )}
+
+                  {/* Open Jobs */}
+                  {selectedCompany.jobs > 0 && (
+                    <div className="bg-[#f8f9fa] border border-gray-100 rounded-xl p-3 flex items-center justify-between">
+                      <div className="flex items-center gap-2 font-semibold text-gray-900 text-sm">
+                        <Briefcase className="w-4 h-4 text-gray-700" />
+                        {selectedCompany.jobs} Open Jobs
+                      </div>
+                      <button className="text-[#5b61f4] bg-white border border-blue-100 font-medium text-xs px-3 py-1.5 rounded-lg hover:bg-blue-50 transition-colors cursor-pointer">
+                        View Jobs
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Action Buttons */}
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    {selectedCompany.website ? (
+                      <a href={selectedCompany.website} target="_blank" rel="noopener noreferrer"
+                        className="flex items-center justify-center gap-1.5 text-xs font-bold text-[#5b61f4] border border-blue-200 bg-blue-50 rounded-lg py-2.5 hover:bg-blue-100 transition-colors">
+                        <Globe className="w-3.5 h-3.5" /> Website ↗
+                      </a>
+                    ) : (
+                      <button className="flex items-center justify-center gap-1.5 text-xs font-bold text-gray-400 border border-gray-200 rounded-lg py-2.5 cursor-not-allowed">
+                        <Globe className="w-3.5 h-3.5" /> No Website
+                      </button>
+                    )}
+                    <button className="bg-[#5b61f4] text-white text-xs font-medium rounded-lg py-2.5 hover:bg-blue-700 transition-colors cursor-pointer">
+                      View Profile
+                    </button>
+                  </div>
+
+                </div>
               </div>
+            )}
+          </div>
+        ) : (
+          /* List View Mode */
+          <div className="flex-1 overflow-y-auto bg-[#f8f9fa] p-4 sm:p-6 flex flex-col">
+            {/* List Header */}
+            <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-200 shrink-0">
+              <div>
+                <h2 className="text-base sm:text-lg font-bold text-gray-900">
+                  Companies Directory in Bhubaneswar
+                </h2>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Showing <span className="font-bold text-[#5b61f4]">{filteredCompanies.length}</span> companies matching current filters
+                </p>
+              </div>
+              {activeFilterCount > 0 && (
+                <button onClick={clearAllFilters} className="text-xs text-rose-600 hover:underline font-semibold flex items-center gap-1 cursor-pointer">
+                  <RotateCcw className="w-3 h-3" /> Clear all filters
+                </button>
+              )}
             </div>
-          )}
-        </div>
+
+            {filteredCompanies.length === 0 ? (
+              <div className="flex-1 flex flex-col items-center justify-center p-8 bg-white rounded-2xl border border-gray-200 shadow-sm text-center my-auto">
+                <Building2 className="w-12 h-12 text-gray-300 mb-3" />
+                <h3 className="font-bold text-gray-900 text-base mb-1">No companies found</h3>
+                <p className="text-xs text-gray-500 max-w-sm mb-4">
+                  None of the companies match your current combination of filters. Try clearing or expanding your selection.
+                </p>
+                <button onClick={clearAllFilters} className="px-5 py-2.5 bg-[#5b61f4] text-white text-xs font-bold rounded-xl hover:bg-blue-700 transition-colors shadow-sm cursor-pointer">
+                  Clear All Filters
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 pb-12">
+                {filteredCompanies.map((comp) => (
+                  <div 
+                    key={comp.id}
+                    onClick={() => { setSelectedCompany(comp); setShowRightCard(true); }}
+                    className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm hover:shadow-md hover:border-blue-200 transition-all flex flex-col justify-between cursor-pointer group"
+                  >
+                    <div>
+                      <div className="flex items-start justify-between gap-3 mb-2.5">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 border border-gray-100 overflow-hidden bg-white shadow-2xs`}>
+                            {comp.logo && typeof comp.logo === 'string' && comp.logo.startsWith('http') ? (
+                              <img src={comp.logo} alt="logo" className="w-full h-full object-contain p-1" />
+                            ) : (
+                              <span className="font-bold text-[#5b61f4] text-base">{comp.name.charAt(0)}</span>
+                            )}
+                          </div>
+                          <div>
+                            <h3 className="text-sm font-bold text-gray-900 group-hover:text-[#5b61f4] transition-colors leading-tight line-clamp-1">
+                              {comp.name}
+                            </h3>
+                            <span className="text-[11px] font-medium text-gray-500 mt-0.5 inline-block">
+                              {comp.category}
+                            </span>
+                          </div>
+                        </div>
+                        {comp.jobs > 0 && (
+                          <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0">
+                            {comp.jobs} Open Jobs
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Address */}
+                      <div className="flex items-start gap-1.5 text-xs text-gray-600 mb-2">
+                        <MapPin className="w-3.5 h-3.5 text-gray-400 shrink-0 mt-0.5" />
+                        <span className="line-clamp-2 leading-relaxed">{comp.address || comp.location || 'Bhubaneswar, Odisha'}</span>
+                      </div>
+
+                      {/* Description snippet */}
+                      {comp.description && (
+                        <p className="text-xs text-gray-500 line-clamp-2 mb-3 bg-gray-50/80 p-2 rounded-lg border border-gray-100/80">
+                          {comp.description}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Metadata & Actions */}
+                    <div className="pt-2 border-t border-gray-100 flex items-center justify-between text-xs mt-auto">
+                      <span className="text-[11px] text-gray-400 font-medium">
+                        {comp.employeeCount || comp.area || 'Bhubaneswar'}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setViewMode('map');
+                            setSelectedCompany(comp);
+                            setShowRightCard(true);
+                            if (mapRef.current) {
+                              mapRef.current.setView([comp.lat, comp.lng], 15, { animate: true });
+                            }
+                          }}
+                          className="text-[11px] font-bold text-[#5b61f4] hover:underline flex items-center gap-1 cursor-pointer"
+                        >
+                          <MapIcon className="w-3 h-3" /> View Map
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Bottom Footer Section */}
