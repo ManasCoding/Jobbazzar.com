@@ -771,8 +771,8 @@ const Home = () => {
         </button>
 
         <div className="flex items-center gap-2 shrink-0">
-          <Link to="/signin" className="flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-gray-900 border border-gray-200 px-3 py-2 sm:px-4 sm:py-2.5 rounded-lg bg-white shadow-sm hover:bg-gray-50 transition-colors">
-            <User className="w-4 h-4" /> <span className="hidden sm:inline">Sign In</span>
+          <Link to="/signin" className="flex items-center gap-2 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 px-3 py-2 sm:px-4 sm:py-2.5 rounded-lg shadow-sm hover:shadow transition-all">
+            <User className="w-4 h-4" /> <span>Admin</span>
           </Link>
         </div>
       </header>
